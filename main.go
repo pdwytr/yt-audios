@@ -5,43 +5,41 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 //go:embed index.html
 var content embed.FS
 
-// Shared client with aggressive connection reuse
-var streamClient = &http.Client{
-	Transport: &http.Transport{
-		DialContext: (&net.Dialer{
-			Timeout:   10 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
-		MaxIdleConnsPerHost:   10,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   5 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
-		DisableCompression:    true,
-	},
-}
+// tracks in-progress downloads: videoID -> channel that closes when done
+var downloads sync.Map
+
+// temp directory for downloaded audio files
+var tmpDir string
 
 type AudioInfo struct {
 	VideoID  string  `json:"video_id"`
 	Title    string  `json:"title"`
-	AudioURL string  `json:"audio_url"`
 	Duration float64 `json:"duration"`
 }
 
 func main() {
+	// create a temp directory for audio files
+	var err error
+	tmpDir, err = os.MkdirTemp("", "yt-audios-*")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -65,6 +63,10 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
+func audioPath(videoID string) string {
+	return filepath.Join(tmpDir, videoID+".m4a")
+}
+
 func handleAudio(w http.ResponseWriter, r *http.Request) {
 	ytURL := r.URL.Query().Get("url")
 	if ytURL == "" {
@@ -75,93 +77,110 @@ func handleAudio(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
+	// get metadata
 	cmd := exec.CommandContext(ctx, "yt-dlp",
 		"-f", "bestaudio[ext=m4a]/bestaudio[acodec=aac]/bestaudio",
 		"--format-sort", "ext:m4a:mp4:webm",
 		"--print", "%(duration)s",
 		"--print", "%(title)s",
 		"--print", "%(id)s",
-		"--print", "%(url)s",
 		"--no-playlist",
 		ytURL,
 	)
 
 	out, err := cmd.Output()
 	if err != nil {
-		log.Printf("yt-dlp error: %v", err)
+		stderr := ""
+		if ee, ok := err.(*exec.ExitError); ok {
+			stderr = string(ee.Stderr)
+		}
+		log.Printf("yt-dlp error: %v | stderr: %s", err, stderr)
 		http.Error(w, `{"error":"failed to extract audio"}`, http.StatusInternalServerError)
 		return
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) < 4 {
+	if len(lines) < 3 {
 		http.Error(w, `{"error":"unexpected yt-dlp output"}`, http.StatusInternalServerError)
 		return
 	}
 
-	// --print outputs in order: duration, title, id, url
 	dur, _ := strconv.ParseFloat(lines[0], 64)
+	videoID := lines[2]
 
 	info := AudioInfo{
 		Title:    lines[1],
-		VideoID:  lines[2],
-		AudioURL: lines[3],
+		VideoID:  videoID,
 		Duration: dur,
+	}
+
+	// start background download if not already cached or in progress
+	filePath := audioPath(videoID)
+	if _, err := os.Stat(filePath); err != nil {
+		// file doesn't exist yet — check if download is already running
+		if _, loaded := downloads.LoadOrStore(videoID, make(chan struct{})); !loaded {
+			go downloadAudio(videoID, ytURL)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(info)
 }
 
+func downloadAudio(videoID, ytURL string) {
+	ch, _ := downloads.Load(videoID)
+	defer close(ch.(chan struct{}))
+
+	filePath := audioPath(videoID)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "yt-dlp",
+		"-f", "bestaudio[ext=m4a]/bestaudio[acodec=aac]/bestaudio",
+		"--format-sort", "ext:m4a:mp4:webm",
+		"-o", filePath,
+		"--no-part",
+		"--no-playlist",
+		ytURL,
+	)
+
+	start := time.Now()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("download error for %s: %v | output: %s", videoID, err, string(out))
+		os.Remove(filePath)
+		return
+	}
+	log.Printf("downloaded %s in %s", videoID, time.Since(start).Round(time.Millisecond))
+}
+
 func handleStream(w http.ResponseWriter, r *http.Request) {
-	rawURL := r.URL.Query().Get("url")
-	if rawURL == "" {
-		http.Error(w, "missing url parameter", http.StatusBadRequest)
+	videoID := r.URL.Query().Get("id")
+	if videoID == "" {
+		http.Error(w, "missing id parameter", http.StatusBadRequest)
 		return
 	}
 
-	req, err := http.NewRequestWithContext(r.Context(), "GET", rawURL, nil)
-	if err != nil {
-		http.Error(w, "invalid url", http.StatusBadRequest)
-		return
-	}
+	filePath := audioPath(videoID)
 
-	if rng := r.Header.Get("Range"); rng != "" {
-		req.Header.Set("Range", rng)
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-
-	resp, err := streamClient.Do(req)
-	if err != nil {
-		log.Printf("stream fetch error: %v", err)
-		http.Error(w, "upstream error", http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
-	for k, vals := range resp.Header {
-		for _, v := range vals {
-			w.Header().Add(k, v)
+	// if download is in progress, wait for it
+	if ch, ok := downloads.Load(videoID); ok {
+		select {
+		case <-ch.(chan struct{}):
+			// download finished
+		case <-r.Context().Done():
+			return
 		}
 	}
-	w.WriteHeader(resp.StatusCode)
 
-	// Flush data to browser as it arrives
-	if flusher, ok := w.(http.Flusher); ok {
-		buf := make([]byte, 32*1024)
-		for {
-			n, err := resp.Body.Read(buf)
-			if n > 0 {
-				w.Write(buf[:n])
-				flusher.Flush()
-			}
-			if err != nil {
-				break
-			}
-		}
-	} else {
-		io.Copy(w, resp.Body)
+	// check file exists
+	if _, err := os.Stat(filePath); err != nil {
+		http.Error(w, `{"error":"audio not found"}`, http.StatusNotFound)
+		return
 	}
+
+	// http.ServeFile handles Range requests, Content-Length, etc. automatically
+	http.ServeFile(w, r, filePath)
 }
 
 func init() {
