@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -16,8 +17,8 @@ import (
 	"time"
 )
 
-//go:embed index.html
-var content embed.FS
+//go:embed all:frontend/dist
+var distFS embed.FS
 
 // tracks in-progress downloads: videoID -> channel that closes when done
 var downloads sync.Map
@@ -45,22 +46,16 @@ func main() {
 		port = "8080"
 	}
 
-	http.HandleFunc("/", handleIndex)
+	distSub, err := fs.Sub(distFS, "frontend/dist")
+	if err != nil {
+		log.Fatal(err)
+	}
+	http.Handle("/", http.FileServer(http.FS(distSub)))
 	http.HandleFunc("/audio", handleAudio)
 	http.HandleFunc("/stream", handleStream)
 
 	log.Printf("Listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
-}
-
-func handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	data, _ := content.ReadFile("index.html")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(data)
 }
 
 func audioPath(videoID string) string {
