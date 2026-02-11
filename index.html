@@ -125,7 +125,8 @@ async function loadAudio() {
     titleEl.textContent = data.title;
     trueDuration = data.duration || 0;
     if (trueDuration) durationEl.textContent = fmt(trueDuration);
-    audio.src = "/stream?url=" + encodeURIComponent(data.audio_url);
+    statusEl.textContent = "Downloading...";
+    audio.src = "/stream?id=" + encodeURIComponent(data.video_id);
     audio.load();
     audio.play().catch(() => {});
     statusEl.textContent = "";
