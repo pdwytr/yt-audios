@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YT Audio Player</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #1a1a2e; color: #e0e0e0;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh;
+  }
+  .player {
+    background: #16213e; border-radius: 12px; padding: 32px;
+    width: 420px; max-width: 95vw; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  h1 { font-size: 18px; text-align: center; margin-bottom: 20px; color: #a0a0c0; }
+  .input-row {
+    display: flex; gap: 8px; margin-bottom: 20px;
+  }
+  .input-row input {
+    flex: 1; padding: 10px 12px; border: 1px solid #2a2a4a; border-radius: 8px;
+    background: #0f3460; color: #e0e0e0; font-size: 14px; outline: none;
+  }
+  .input-row input:focus { border-color: #e94560; }
+  .input-row button {
+    padding: 10px 20px; border: none; border-radius: 8px;
+    background: #e94560; color: white; font-size: 14px; cursor: pointer;
+    font-weight: 600;
+  }
+  .input-row button:hover { background: #c73650; }
+  .input-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #title {
+    font-size: 15px; font-weight: 600; text-align: center;
+    margin-bottom: 16px; min-height: 20px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .progress-bar {
+    width: 100%; height: 6px; background: #2a2a4a; border-radius: 3px;
+    cursor: pointer; margin-bottom: 12px; position: relative;
+  }
+  .progress-bar:hover { height: 10px; margin-bottom: 8px; }
+  .progress-fill {
+    height: 100%; background: #e94560; border-radius: 3px;
+    width: 0%; pointer-events: none; transition: none;
+  }
+  .time-row {
+    display: flex; justify-content: space-between; font-size: 13px;
+    color: #808090; margin-bottom: 16px; font-variant-numeric: tabular-nums;
+  }
+  .controls {
+    display: flex; justify-content: center; align-items: center; gap: 16px;
+  }
+  .controls button {
+    background: none; border: 1px solid #2a2a4a; border-radius: 50%;
+    color: #e0e0e0; cursor: pointer; display: flex;
+    align-items: center; justify-content: center;
+  }
+  .controls button:hover { border-color: #e94560; color: #e94560; }
+  .btn-skip { width: 44px; height: 44px; font-size: 13px; font-weight: 600; }
+  .btn-play { width: 56px; height: 56px; font-size: 22px; }
+  #status {
+    text-align: center; margin-top: 16px; font-size: 13px; color: #e94560;
+    min-height: 18px;
+  }
+</style>
+</head>
+<body>
+<div class="player">
+  <h1>YT Audio Player</h1>
+  <div class="input-row">
+    <input type="text" id="url" placeholder="Paste YouTube URL...">
+    <button id="loadBtn" onclick="loadAudio()">Load</button>
+  </div>
+  <div id="title"></div>
+  <div class="progress-bar" id="progressBar" onclick="seek(event)">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+  <div class="time-row">
+    <span id="currentTime">0:00</span>
+    <span id="duration">0:00</span>
+  </div>
+  <div class="controls">
+    <button class="btn-skip" onclick="skip(-15)">-15</button>
+    <button class="btn-play" id="playBtn" onclick="togglePlay()">&#9654;</button>
+    <button class="btn-skip" onclick="skip(15)">+15</button>
+  </div>
+  <div id="status"></div>
+  <audio id="audio" preload="auto"></audio>
+</div>
+<script>
+const audio = document.getElementById("audio");
+const playBtn = document.getElementById("playBtn");
+const progressFill = document.getElementById("progressFill");
+const currentTimeEl = document.getElementById("currentTime");
+const durationEl = document.getElementById("duration");
+const statusEl = document.getElementById("status");
+const titleEl = document.getElementById("title");
+const urlInput = document.getElementById("url");
+const loadBtn = document.getElementById("loadBtn");
+let trueDuration = 0;
+
+function fmt(s) {
+  if (!isFinite(s)) return "0:00";
+  s = Math.floor(s);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const ms = m.toString().padStart(h ? 2 : 1, "0") + ":" + sec.toString().padStart(2, "0");
+  return h ? h + ":" + ms : ms;
+}
+
+async function loadAudio() {
+  const ytUrl = urlInput.value.trim();
+  if (!ytUrl) return;
+  statusEl.textContent = "Loading...";
+  loadBtn.disabled = true;
+  titleEl.textContent = "";
+  try {
+    const resp = await fetch("/audio?url=" + encodeURIComponent(ytUrl));
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    titleEl.textContent = data.title;
+    trueDuration = data.duration || 0;
+    if (trueDuration) durationEl.textContent = fmt(trueDuration);
+    audio.src = "/stream?url=" + encodeURIComponent(data.audio_url);
+    audio.load();
+    audio.play().catch(() => {});
+    statusEl.textContent = "";
+  } catch (e) {
+    statusEl.textContent = "Error: " + e.message;
+  } finally {
+    loadBtn.disabled = false;
+  }
+}
+
+audio.addEventListener("error", () => {
+  statusEl.textContent = "Playback error";
+});
+
+function togglePlay() {
+  if (!audio.src) return;
+  if (audio.paused) audio.play(); else audio.pause();
+}
+
+function dur() {
+  return trueDuration || audio.duration || 0;
+}
+
+function skip(s) {
+  if (!audio.src) return;
+  audio.currentTime = Math.max(0, Math.min(dur(), audio.currentTime + s));
+}
+
+function seek(e) {
+  const d = dur();
+  if (!d) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  audio.currentTime = ((e.clientX - rect.left) / rect.width) * d;
+}
+
+audio.addEventListener("timeupdate", () => {
+  const d = dur();
+  if (d && audio.currentTime >= d) {
+    audio.currentTime = 0;
+    audio.play().catch(() => {});
+    return;
+  }
+  currentTimeEl.textContent = fmt(audio.currentTime);
+  if (d) {
+    progressFill.style.width = Math.min(audio.currentTime / d * 100, 100) + "%";
+  }
+});
+
+audio.addEventListener("loadedmetadata", () => {
+  if (!trueDuration) durationEl.textContent = fmt(audio.duration);
+});
+
+audio.addEventListener("durationchange", () => {
+  if (!trueDuration) durationEl.textContent = fmt(audio.duration);
+});
+
+audio.addEventListener("play", () => { playBtn.innerHTML = "&#9646;&#9646;"; });
+audio.addEventListener("pause", () => { playBtn.innerHTML = "&#9654;"; });
+
+urlInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") loadAudio();
+});
+</script>
+</body>
+</html>
