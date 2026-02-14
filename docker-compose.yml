@@ -4,11 +4,14 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/app/data         # persists data.json
+      - ./data:/app/data
       - ./cookies.txt:/app/cookies.txt:ro  # mount cookies (optional)
+      - ./channels.csv:/app/channels.csv:ro
     environment:
       - DATA_DIR=/app/data
-      - YT_COOKIES=/app/cookies.txt  # remove this line if not using cookies
+      - USERS_FILE=/app/users.csv
+      - CHANNELS_FILE=/app/channels.csv
+      - YT_COOKIES=/app/cookies.txt  # remove if not using cookies
 
   tunnel:
     image: cloudflare/cloudflared:latest

@@ -11,53 +11,25 @@ import (
 	"time"
 )
 
-func handleProfiles(store *Store) http.HandlerFunc {
+func handleChannels(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(store.ListProfiles())
-
-		case http.MethodPost:
-			var body struct {
-				Name string `json:"name"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Name) == "" {
-				http.Error(w, `{"error":"invalid name"}`, http.StatusBadRequest)
-				return
-			}
-			if err := store.CreateProfile(strings.TrimSpace(body.Name)); err != nil {
-				http.Error(w, `{"error":"save failed"}`, http.StatusInternalServerError)
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]string{"name": strings.TrimSpace(body.Name)})
-
-		case http.MethodDelete:
-			name := r.URL.Query().Get("name")
-			if name == "" {
-				http.Error(w, `{"error":"missing name"}`, http.StatusBadRequest)
-				return
-			}
-			if err := store.DeleteProfile(name); err != nil {
-				http.Error(w, `{"error":"save failed"}`, http.StatusInternalServerError)
-				return
-			}
-			w.WriteHeader(http.StatusNoContent)
-
-		default:
+		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
 		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(store.ListChannels())
 	}
 }
 
 func handlePlaylists(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		username := getUser(r)
+
 		switch r.Method {
 		case http.MethodGet:
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(store.ListPlaylists())
+			json.NewEncoder(w).Encode(store.ListUserPlaylists(username))
 
 		case http.MethodPost:
 			var body struct {
@@ -67,17 +39,35 @@ func handlePlaylists(store *Store) http.HandlerFunc {
 				http.Error(w, `{"error":"invalid url"}`, http.StatusBadRequest)
 				return
 			}
-			// extract playlist ID from URL
 			playlistID := extractPlaylistID(body.URL)
 			if playlistID == "" {
 				http.Error(w, `{"error":"could not extract playlist ID from URL"}`, http.StatusBadRequest)
 				return
 			}
-			if err := store.AddPlaylist(playlistID, body.URL); err != nil {
+
+			// validate channel whitelist
+			channelID, err := validatePlaylistChannel(body.URL)
+			if err != nil {
+				log.Printf("channel validation error: %v", err)
+				http.Error(w, `{"error":"failed to validate playlist channel"}`, http.StatusInternalServerError)
+				return
+			}
+			if !store.IsChannelAllowed(channelID) {
+				http.Error(w, `{"error":"channel not whitelisted"}`, http.StatusForbidden)
+				return
+			}
+
+			if err := store.AddUserPlaylist(username, playlistID, body.URL); err != nil {
 				http.Error(w, `{"error":"save failed"}`, http.StatusInternalServerError)
 				return
 			}
-			go fetchPlaylistVideos(store, playlistID, body.URL)
+
+			// fetch videos if not already cached
+			if !store.HasVideosFor(playlistID) && !store.IsFetching(playlistID) {
+				store.SetFetching(playlistID, true)
+				go fetchPlaylistVideos(store, playlistID, body.URL)
+			}
+
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(map[string]string{"id": playlistID})
@@ -88,7 +78,7 @@ func handlePlaylists(store *Store) http.HandlerFunc {
 				http.Error(w, `{"error":"missing id"}`, http.StatusBadRequest)
 				return
 			}
-			if err := store.DeletePlaylist(id); err != nil {
+			if err := store.DeleteUserPlaylist(username, id); err != nil {
 				http.Error(w, `{"error":"save failed"}`, http.StatusInternalServerError)
 				return
 			}
@@ -106,18 +96,38 @@ func handlePlaylistVideos(store *Store) http.HandlerFunc {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		username := getUser(r)
 		id := r.URL.Query().Get("id")
 		if id == "" {
 			http.Error(w, `{"error":"missing id"}`, http.StatusBadRequest)
 			return
 		}
-		pl := store.GetPlaylist(id)
-		if pl == nil {
+		if !store.UserHasPlaylist(username, id) {
 			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
 			return
 		}
+		videos := store.GetPlaylistVideos(id)
+		_, fetching := store.fetchingPlaylists.Load(id)
+
+		// find title from user's playlist entry
+		playlists := store.ListUserPlaylists(username)
+		title := id
+		for _, pl := range playlists {
+			if pl.ID == id {
+				if pl.Title != "" {
+					title = pl.Title
+				}
+				break
+			}
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(pl)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":       id,
+			"title":    title,
+			"videos":   videos,
+			"fetching": fetching,
+		})
 	}
 }
 
@@ -127,51 +137,48 @@ func handlePlaylistRefresh(store *Store) http.HandlerFunc {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		username := getUser(r)
 		id := r.URL.Query().Get("id")
 		if id == "" {
 			http.Error(w, `{"error":"missing id"}`, http.StatusBadRequest)
 			return
 		}
-		pl := store.GetPlaylist(id)
-		if pl == nil {
+		if !store.UserHasPlaylist(username, id) {
 			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
 			return
 		}
-		store.SetPlaylistFetching(id, true)
-		go fetchPlaylistVideos(store, id, pl.URL)
+		url := store.GetPlaylistURL(id)
+		if url == "" {
+			http.Error(w, `{"error":"playlist URL not found"}`, http.StatusNotFound)
+			return
+		}
+		store.SetFetching(id, true)
+		go fetchPlaylistVideos(store, id, url)
 		w.WriteHeader(http.StatusAccepted)
 	}
 }
 
 func handleProgress(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		username := getUser(r)
+
 		switch r.Method {
 		case http.MethodGet:
-			profile := r.URL.Query().Get("profile")
-			if profile == "" {
-				http.Error(w, `{"error":"missing profile"}`, http.StatusBadRequest)
-				return
-			}
-			pd := store.GetProgress(profile)
-			if pd == nil {
-				http.Error(w, `{"error":"profile not found"}`, http.StatusNotFound)
-				return
-			}
+			pd := store.GetProgress(username)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(pd)
 
 		case http.MethodPost:
 			var body struct {
-				Profile    string  `json:"profile"`
 				PlaylistID string  `json:"playlist_id"`
 				VideoID    string  `json:"video_id"`
 				Timestamp  float64 `json:"timestamp"`
 			}
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Profile == "" || body.VideoID == "" {
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.VideoID == "" {
 				http.Error(w, `{"error":"invalid body"}`, http.StatusBadRequest)
 				return
 			}
-			if err := store.SaveProgress(body.Profile, body.PlaylistID, body.VideoID, body.Timestamp); err != nil {
+			if err := store.SaveProgress(username, body.PlaylistID, body.VideoID, body.Timestamp); err != nil {
 				http.Error(w, `{"error":"save failed"}`, http.StatusInternalServerError)
 				return
 			}
@@ -184,7 +191,6 @@ func handleProgress(store *Store) http.HandlerFunc {
 }
 
 func extractPlaylistID(url string) string {
-	// handle youtube.com/playlist?list=PLxxx
 	if i := strings.Index(url, "list="); i != -1 {
 		id := url[i+5:]
 		if j := strings.IndexByte(id, '&'); j != -1 {
@@ -193,6 +199,33 @@ func extractPlaylistID(url string) string {
 		return id
 	}
 	return ""
+}
+
+func validatePlaylistChannel(url string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	args := append([]string{
+		"--flat-playlist",
+		"--playlist-items", "1",
+		"--dump-json",
+		"--no-download",
+	}, cookieArgs()...)
+	args = append(args, url)
+	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+
+	var entry struct {
+		ChannelID string `json:"channel_id"`
+	}
+	if err := json.Unmarshal(out, &entry); err != nil {
+		return "", err
+	}
+	return entry.ChannelID, nil
 }
 
 func fetchPlaylistVideos(store *Store, id, url string) {
@@ -210,18 +243,19 @@ func fetchPlaylistVideos(store *Store, id, url string) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Printf("playlist fetch pipe error for %s: %v", id, err)
-		store.SetPlaylistFetching(id, false)
+		store.SetFetching(id, false)
 		return
 	}
 
 	if err := cmd.Start(); err != nil {
 		log.Printf("playlist fetch start error for %s: %v", id, err)
-		store.SetPlaylistFetching(id, false)
+		store.SetFetching(id, false)
 		return
 	}
 
 	var videos []Video
 	var playlistTitle string
+	position := 0
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 0, 256*1024), 1024*1024)
 	for scanner.Scan() {
@@ -241,7 +275,9 @@ func fetchPlaylistVideos(store *Store, id, url string) {
 			VideoID:  entry.ID,
 			Title:    entry.Title,
 			Duration: entry.Duration,
+			Position: position,
 		})
+		position++
 	}
 
 	if err := cmd.Wait(); err != nil {

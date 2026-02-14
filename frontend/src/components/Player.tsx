@@ -4,10 +4,10 @@ import {
   getPlaylistVideos,
   getProgress,
   saveProgress,
+  saveProgressBeacon,
 } from "../api";
 
 interface Props {
-  profile: string;
   playlistId: string;
   videoId: string;
   onBack: () => void;
@@ -28,7 +28,6 @@ function fmt(s: number): string {
 }
 
 export default function Player({
-  profile,
   playlistId,
   videoId,
   onBack,
@@ -84,7 +83,7 @@ export default function Player({
 
       // restore saved position
       try {
-        const progress = await getProgress(profile);
+        const progress = await getProgress();
         const pos = progress.positions?.[playlistId];
         if (pos && pos.video_id === vid && pos.timestamp > 0) {
           audio.currentTime = pos.timestamp;
@@ -113,23 +112,14 @@ export default function Player({
     saveTimerRef.current = window.setInterval(() => {
       const audio = audioRef.current;
       if (audio && !audio.paused && audio.currentTime > 0) {
-        saveProgress(profile, playlistId, videoIdRef.current, audio.currentTime);
+        saveProgress(playlistId, videoIdRef.current, audio.currentTime);
       }
     }, 10000);
 
     const handleBeforeUnload = () => {
       const audio = audioRef.current;
       if (audio && audio.currentTime > 0) {
-        // use sendBeacon for reliability
-        navigator.sendBeacon(
-          "/api/progress",
-          JSON.stringify({
-            profile,
-            playlist_id: playlistId,
-            video_id: videoIdRef.current,
-            timestamp: audio.currentTime,
-          })
-        );
+        saveProgressBeacon(playlistId, videoIdRef.current, audio.currentTime);
       }
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
@@ -140,10 +130,10 @@ export default function Player({
       // save on unmount
       const audio = audioRef.current;
       if (audio && audio.currentTime > 0) {
-        saveProgress(profile, playlistId, videoIdRef.current, audio.currentTime);
+        saveProgress(playlistId, videoIdRef.current, audio.currentTime);
       }
     };
-  }, [profile, playlistId]);
+  }, [playlistId]);
 
   function togglePlay() {
     const audio = audioRef.current;
@@ -153,7 +143,7 @@ export default function Player({
     } else {
       audio.pause();
       // save on pause
-      saveProgress(profile, playlistId, videoIdRef.current, audio.currentTime);
+      saveProgress(playlistId, videoIdRef.current, audio.currentTime);
     }
   }
 

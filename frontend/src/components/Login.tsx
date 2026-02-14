@@ -2,7 +2,7 @@ import { useState } from "react";
 import { login } from "../api";
 
 interface Props {
-  onLogin: (profile: string) => void;
+  onLogin: () => void;
 }
 
 export default function Login({ onLogin }: Props) {
@@ -19,7 +19,8 @@ export default function Login({ onLogin }: Props) {
     try {
       const result = await login(username.trim(), password);
       localStorage.setItem("yt-audios-token", result.token);
-      onLogin(result.profile);
+      localStorage.setItem("yt-audios-profile", result.username);
+      onLogin();
     } catch (err) {
       setError((err as Error).message);
     } finally {

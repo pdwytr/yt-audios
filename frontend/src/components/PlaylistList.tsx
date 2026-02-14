@@ -1,16 +1,19 @@
 import { useState, useEffect, useRef } from "react";
-import type { PlaylistSummary } from "../types";
-import { listPlaylists } from "../api";
+import type { PlaylistSummary, Channel } from "../types";
+import { listPlaylists, addPlaylist, deletePlaylist, listChannels } from "../api";
 
 interface Props {
-  profile: string;
   onSelect: (playlistId: string) => void;
   onBack: () => void;
 }
 
-export default function PlaylistList({ profile, onSelect, onBack }: Props) {
+export default function PlaylistList({ onSelect, onBack }: Props) {
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([]);
+  const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [newUrl, setNewUrl] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState("");
   const pollRef = useRef<number | null>(null);
 
   async function load() {
@@ -32,10 +35,32 @@ export default function PlaylistList({ profile, onSelect, onBack }: Props) {
 
   useEffect(() => {
     load();
+    listChannels().then(setChannels).catch(() => {});
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, []);
+
+  async function handleAdd() {
+    const url = newUrl.trim();
+    if (!url) return;
+    setError("");
+    setAdding(true);
+    try {
+      await addPlaylist(url);
+      setNewUrl("");
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    await deletePlaylist(id);
+    await load();
+  }
 
   return (
     <div className="view-container">
@@ -45,6 +70,20 @@ export default function PlaylistList({ profile, onSelect, onBack }: Props) {
         </button>
         <h1>Playlists</h1>
       </div>
+      <div className="input-row" style={{ marginBottom: 16 }}>
+        <input
+          type="text"
+          value={newUrl}
+          onChange={(e) => setNewUrl(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+          placeholder="Paste playlist URL..."
+          disabled={adding}
+        />
+        <button onClick={handleAdd} disabled={adding || !newUrl.trim()}>
+          {adding ? "Adding..." : "Add"}
+        </button>
+      </div>
+      {error && <div className="status" style={{ marginBottom: 12 }}>{error}</div>}
       {loading ? (
         <div className="status">Loading...</div>
       ) : (
@@ -65,11 +104,27 @@ export default function PlaylistList({ profile, onSelect, onBack }: Props) {
                     : `${pl.video_count} videos`}
                 </span>
               </div>
+              <button
+                className="btn-delete"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(pl.id);
+                }}
+                title="Remove playlist"
+              >
+                &times;
+              </button>
             </div>
           ))}
           {playlists.length === 0 && (
-            <div className="empty">No playlists available.</div>
+            <div className="empty">No playlists yet. Add one above.</div>
           )}
+        </div>
+      )}
+      {channels.length > 0 && (
+        <div className="channels-info">
+          <span>Allowed channels: </span>
+          {channels.map((ch) => ch.channel_name).join(", ")}
         </div>
       )}
     </div>

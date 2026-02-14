@@ -41,13 +41,16 @@ func main() {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// init data store (DATA_DIR env, or next to binary)
+	// init data store (DATA_DIR env, or ./data in CWD)
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir == "" {
-		exe, _ := os.Executable()
-		dataDir = filepath.Dir(exe)
+		dataDir = "data"
 	}
-	store, err := NewStore(dataDir)
+	channelsFile := os.Getenv("CHANNELS_FILE")
+	if channelsFile == "" {
+		channelsFile = "channels.csv"
+	}
+	store, err := NewStore(dataDir, channelsFile)
 	if err != nil {
 		log.Fatalf("failed to init store: %v", err)
 	}
@@ -58,18 +61,6 @@ func main() {
 		usersFile = "users.csv"
 	}
 	auth := NewAuth(usersFile)
-
-	// pre-seed playlists
-	seedPlaylists := []struct{ id, url string }{
-		{"PLG9sUy3Uhal1lLZwkmhlQY7dlgFd1dpEW", "https://www.youtube.com/playlist?list=PLG9sUy3Uhal1lLZwkmhlQY7dlgFd1dpEW"},
-		{"PLG9sUy3Uhal32ob-6jAw3vfa4rFKLyB73", "https://www.youtube.com/playlist?list=PLG9sUy3Uhal32ob-6jAw3vfa4rFKLyB73"},
-	}
-	for _, sp := range seedPlaylists {
-		if pl := store.GetPlaylist(sp.id); pl == nil {
-			store.AddPlaylist(sp.id, sp.url)
-			go fetchPlaylistVideos(store, sp.id, sp.url)
-		}
-	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -85,12 +76,12 @@ func main() {
 	http.HandleFunc("/stream", handleStream)
 
 	// API routes
-	http.HandleFunc("/api/login", handleLogin(auth, store))
-	http.HandleFunc("/api/profiles", handleProfiles(store))
-	http.HandleFunc("/api/playlists", handlePlaylists(store))
-	http.HandleFunc("/api/playlists/videos", handlePlaylistVideos(store))
-	http.HandleFunc("/api/playlists/refresh", handlePlaylistRefresh(store))
-	http.HandleFunc("/api/progress", handleProgress(store))
+	http.HandleFunc("/api/login", handleLogin(auth))
+	http.HandleFunc("/api/channels", handleChannels(store))
+	http.HandleFunc("/api/playlists", auth.middleware(handlePlaylists(store)))
+	http.HandleFunc("/api/playlists/videos", auth.middleware(handlePlaylistVideos(store)))
+	http.HandleFunc("/api/playlists/refresh", auth.middleware(handlePlaylistRefresh(store)))
+	http.HandleFunc("/api/progress", auth.middleware(handleProgress(store)))
 
 	log.Printf("Listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))

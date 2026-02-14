@@ -20,9 +20,7 @@ export interface PlaylistSummary {
 export interface Playlist {
   id: string;
   title: string;
-  url: string;
   videos: Video[];
-  fetched_at: string;
   fetching: boolean;
 }
 
@@ -37,8 +35,13 @@ export interface ProgressData {
   positions: Record<string, PlaylistPosition>;
 }
 
+export interface Channel {
+  channel_id: string;
+  channel_name: string;
+}
+
 export type View =
   | { page: "login" }
-  | { page: "playlists"; profile: string }
-  | { page: "videos"; profile: string; playlistId: string }
-  | { page: "player"; profile: string; playlistId: string; videoId: string };
+  | { page: "playlists" }
+  | { page: "videos"; playlistId: string }
+  | { page: "player"; playlistId: string; videoId: string };

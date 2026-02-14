@@ -1,18 +1,24 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 )
 
+type contextKey string
+
+const userContextKey contextKey = "username"
+
 type Auth struct {
-	mu       sync.RWMutex
-	sessions map[string]string // token -> username
+	mu        sync.RWMutex
+	sessions  map[string]string // token -> username
 	usersFile string
 }
 
@@ -64,7 +70,34 @@ func (a *Auth) getUsername(token string) (string, bool) {
 	return name, ok
 }
 
-func handleLogin(auth *Auth, store *Store) http.HandlerFunc {
+func (a *Auth) middleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		header := r.Header.Get("Authorization")
+		if !strings.HasPrefix(header, "Bearer ") {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		token := strings.TrimPrefix(header, "Bearer ")
+		username, ok := a.getUsername(token)
+		if !ok {
+			w.Header().Set("Content-Type", "application/json")
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		ctx := context.WithValue(r.Context(), userContextKey, username)
+		next(w, r.WithContext(ctx))
+	}
+}
+
+func getUser(r *http.Request) string {
+	if u, ok := r.Context().Value(userContextKey).(string); ok {
+		return u
+	}
+	return ""
+}
+
+func handleLogin(auth *Auth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -82,13 +115,11 @@ func handleLogin(auth *Auth, store *Store) http.HandlerFunc {
 			http.Error(w, `{"error":"invalid credentials"}`, http.StatusUnauthorized)
 			return
 		}
-		// auto-create profile for this user
-		store.CreateProfile(body.Username)
 		token := auth.createSession(body.Username)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"token":   token,
-			"profile": body.Username,
+			"token":    token,
+			"username": body.Username,
 		})
 	}
 }

@@ -147,6 +147,12 @@ h1 { font-size: 18px; text-align: center; margin-bottom: 20px; color: #a0a0c0; }
 .login-fields button:hover { background: #c73650; }
 .login-fields button:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* channels info */
+.channels-info {
+  margin-top: 16px; font-size: 12px; color: #606080;
+  text-align: center; line-height: 1.4;
+}
+
 /* scrollbar */
 .list::-webkit-scrollbar { width: 6px; }
 .list::-webkit-scrollbar-track { background: transparent; }

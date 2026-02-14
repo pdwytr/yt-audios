@@ -1,9 +1,29 @@
-import type { PlaylistSummary, Playlist, ProgressData, AudioInfo } from "./types";
+import type { PlaylistSummary, Playlist, ProgressData, AudioInfo, Channel } from "./types";
+
+function getToken(): string | null {
+  return localStorage.getItem("yt-audios-token");
+}
+
+async function authFetch(url: string, init?: RequestInit): Promise<Response> {
+  const token = getToken();
+  const headers = new Headers(init?.headers);
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  const res = await fetch(url, { ...init, headers });
+  if (res.status === 401) {
+    localStorage.removeItem("yt-audios-token");
+    localStorage.removeItem("yt-audios-profile");
+    window.location.reload();
+    throw new Error("Unauthorized");
+  }
+  return res;
+}
 
 export async function login(
   username: string,
   password: string
-): Promise<{ token: string; profile: string }> {
+): Promise<{ token: string; username: string }> {
   const res = await fetch("/api/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -16,32 +36,18 @@ export async function login(
   return res.json();
 }
 
-export async function listProfiles(): Promise<string[]> {
-  const res = await fetch("/api/profiles");
+export async function listChannels(): Promise<Channel[]> {
+  const res = await fetch("/api/channels");
   return res.json();
 }
 
-export async function createProfile(name: string): Promise<void> {
-  await fetch("/api/profiles", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  });
-}
-
-export async function deleteProfile(name: string): Promise<void> {
-  await fetch("/api/profiles?name=" + encodeURIComponent(name), {
-    method: "DELETE",
-  });
-}
-
 export async function listPlaylists(): Promise<PlaylistSummary[]> {
-  const res = await fetch("/api/playlists");
+  const res = await authFetch("/api/playlists");
   return res.json();
 }
 
 export async function addPlaylist(url: string): Promise<{ id: string }> {
-  const res = await fetch("/api/playlists", {
+  const res = await authFetch("/api/playlists", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
@@ -54,45 +60,59 @@ export async function addPlaylist(url: string): Promise<{ id: string }> {
 }
 
 export async function deletePlaylist(id: string): Promise<void> {
-  await fetch("/api/playlists?id=" + encodeURIComponent(id), {
+  await authFetch("/api/playlists?id=" + encodeURIComponent(id), {
     method: "DELETE",
   });
 }
 
 export async function getPlaylistVideos(id: string): Promise<Playlist> {
-  const res = await fetch("/api/playlists/videos?id=" + encodeURIComponent(id));
+  const res = await authFetch("/api/playlists/videos?id=" + encodeURIComponent(id));
   return res.json();
 }
 
 export async function refreshPlaylist(id: string): Promise<void> {
-  await fetch("/api/playlists/refresh?id=" + encodeURIComponent(id), {
+  await authFetch("/api/playlists/refresh?id=" + encodeURIComponent(id), {
     method: "POST",
   });
 }
 
-export async function getProgress(profile: string): Promise<ProgressData> {
-  const res = await fetch(
-    "/api/progress?profile=" + encodeURIComponent(profile)
-  );
+export async function getProgress(): Promise<ProgressData> {
+  const res = await authFetch("/api/progress");
   return res.json();
 }
 
 export async function saveProgress(
-  profile: string,
   playlistId: string,
   videoId: string,
   timestamp: number
 ): Promise<void> {
-  await fetch("/api/progress", {
+  await authFetch("/api/progress", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      profile,
       playlist_id: playlistId,
       video_id: videoId,
       timestamp,
     }),
   });
+}
+
+export function saveProgressBeacon(
+  playlistId: string,
+  videoId: string,
+  timestamp: number
+): void {
+  const token = getToken();
+  // sendBeacon doesn't support custom headers, so we use fetch with keepalive
+  fetch("/api/progress", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ playlist_id: playlistId, video_id: videoId, timestamp }),
+    keepalive: true,
+  }).catch(() => {});
 }
 
 export async function loadAudio(url: string): Promise<AudioInfo> {

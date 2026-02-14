@@ -3,7 +3,6 @@ import type { Video, ProgressData } from "../types";
 import { getPlaylistVideos, getProgress, refreshPlaylist } from "../api";
 
 interface Props {
-  profile: string;
   playlistId: string;
   onSelect: (videoId: string) => void;
   onBack: () => void;
@@ -23,7 +22,6 @@ function fmtDuration(s: number): string {
 }
 
 export default function VideoList({
-  profile,
   playlistId,
   onSelect,
   onBack,
@@ -39,7 +37,7 @@ export default function VideoList({
       try {
         const [pl, progress] = await Promise.all([
           getPlaylistVideos(playlistId),
-          getProgress(profile).catch((): ProgressData => ({
+          getProgress().catch((): ProgressData => ({
             video_id: "",
             timestamp: 0,
             positions: {},
@@ -54,7 +52,7 @@ export default function VideoList({
       }
     }
     load();
-  }, [playlistId, profile]);
+  }, [playlistId]);
 
   async function handleRefresh() {
     setLoading(true);
