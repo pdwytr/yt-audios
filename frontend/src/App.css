@@ -121,6 +121,15 @@ h1 { font-size: 18px; text-align: center; margin-bottom: 20px; color: #a0a0c0; }
 .controls button:disabled:hover { border-color: #2a2a4a; color: #e0e0e0; }
 .btn-skip { width: 44px; height: 44px; font-size: 13px; font-weight: 600; }
 .btn-play { width: 56px; height: 56px; font-size: 22px; }
+.speed-row {
+  display: flex; justify-content: center; margin-top: 12px;
+}
+.btn-speed {
+  background: none; border: 1px solid #2a2a4a; border-radius: 8px;
+  color: #a0a0c0; cursor: pointer; padding: 4px 14px; font-size: 13px;
+  font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.btn-speed:hover { border-color: #e94560; color: #e94560; }
 .status {
   text-align: center; margin-top: 16px; font-size: 13px; color: #e94560;
   min-height: 18px;

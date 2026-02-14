@@ -33,7 +33,12 @@ export default function Player({
   onBack,
   onChangeVideo,
 }: Props) {
+  const SPEEDS = [1, 1.25, 1.5, 1.75] as const;
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [speed, setSpeed] = useState(() => {
+    const saved = localStorage.getItem("yt-audios-speed");
+    return saved ? parseFloat(saved) : 1;
+  });
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
@@ -92,6 +97,7 @@ export default function Player({
         // no progress saved yet
       }
 
+      audio.playbackRate = speed;
       audio.play().catch(() => {});
       setStatus("");
     } catch (e) {
@@ -134,6 +140,16 @@ export default function Player({
       }
     };
   }, [playlistId]);
+
+  function cycleSpeed() {
+    const idx = SPEEDS.indexOf(speed as typeof SPEEDS[number]);
+    const next = SPEEDS[(idx + 1) % SPEEDS.length];
+    setSpeed(next);
+    localStorage.setItem("yt-audios-speed", String(next));
+    if (audioRef.current) {
+      audioRef.current.playbackRate = next;
+    }
+  }
 
   function togglePlay() {
     const audio = audioRef.current;
@@ -275,6 +291,11 @@ export default function Player({
             title="Next"
           >
             &#9197;
+          </button>
+        </div>
+        <div className="speed-row">
+          <button className="btn-speed" onClick={cycleSpeed}>
+            {speed}x
           </button>
         </div>
         <div className="status">{status}</div>
