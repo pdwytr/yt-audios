@@ -201,21 +201,17 @@ export default function Player({
     if (!audio) return;
 
     const onTimeUpdate = () => {
-      const d = getDuration();
-      if (d && audio.currentTime >= d) {
-        // auto-advance to next track
-        const idx = playlist.findIndex(
-          (v) => v.video_id === videoIdRef.current
-        );
-        if (idx >= 0 && idx < playlist.length - 1) {
-          onChangeVideo(playlist[idx + 1].video_id);
-        } else {
-          audio.currentTime = 0;
-          audio.pause();
-        }
-        return;
-      }
       setCurrentTime(audio.currentTime);
+    };
+    const onEnded = () => {
+      const idx = playlist.findIndex(
+        (v) => v.video_id === videoIdRef.current
+      );
+      if (idx >= 0 && idx < playlist.length - 1) {
+        onChangeVideo(playlist[idx + 1].video_id);
+      } else if (playlist.length > 0) {
+        onChangeVideo(playlist[0].video_id);
+      }
     };
     const onMeta = () => {
       if (!trueDurationRef.current) setDuration(audio.duration);
@@ -225,6 +221,7 @@ export default function Player({
     const onError = () => setStatus("Playback error");
 
     audio.addEventListener("timeupdate", onTimeUpdate);
+    audio.addEventListener("ended", onEnded);
     audio.addEventListener("loadedmetadata", onMeta);
     audio.addEventListener("durationchange", onMeta);
     audio.addEventListener("play", onPlay);
@@ -233,6 +230,7 @@ export default function Player({
 
     return () => {
       audio.removeEventListener("timeupdate", onTimeUpdate);
+      audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("loadedmetadata", onMeta);
       audio.removeEventListener("durationchange", onMeta);
       audio.removeEventListener("play", onPlay);
@@ -258,7 +256,11 @@ export default function Player({
         <h1>Now Playing</h1>
       </div>
       <div className="player">
-        <div className="title">{title || (loading ? "" : "Select a video")}</div>
+        <div className="title">
+          <span className={`title-text${(title || "").length <= 35 ? " short" : ""}`}>
+            {title || (loading ? "" : "Select a video")}
+          </span>
+        </div>
         <div className="progress-bar" onClick={seek}>
           <div className="progress-fill" style={{ width: `${progress}%` }} />
         </div>

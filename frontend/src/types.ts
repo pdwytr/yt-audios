@@ -30,6 +30,7 @@ export interface PlaylistPosition {
 }
 
 export interface ProgressData {
+  playlist_id: string;
   video_id: string;
   timestamp: number;
   positions: Record<string, PlaylistPosition>;

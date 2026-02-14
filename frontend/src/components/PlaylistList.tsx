@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import type { PlaylistSummary, Channel } from "../types";
-import { listPlaylists, addPlaylist, deletePlaylist, listChannels } from "../api";
+import type { PlaylistSummary, Channel, ProgressData } from "../types";
+import { listPlaylists, addPlaylist, deletePlaylist, listChannels, getProgress } from "../api";
 
 interface Props {
   onSelect: (playlistId: string) => void;
@@ -14,6 +14,7 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
   const [newUrl, setNewUrl] = useState("");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
+  const [lastPlaylistId, setLastPlaylistId] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
 
   async function load() {
@@ -36,6 +37,9 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
   useEffect(() => {
     load();
     listChannels().then(setChannels).catch(() => {});
+    getProgress()
+      .then((p) => { if (p.playlist_id) setLastPlaylistId(p.playlist_id); })
+      .catch(() => {});
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
@@ -91,7 +95,7 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
           {playlists.map((pl) => (
             <div
               key={pl.id}
-              className="list-item"
+              className={`list-item${pl.id === lastPlaylistId ? " active" : ""}`}
               onClick={() => !pl.fetching && onSelect(pl.id)}
             >
               <div className="list-item-content">
