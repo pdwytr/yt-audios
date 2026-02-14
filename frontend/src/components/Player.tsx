@@ -64,6 +64,9 @@ export default function Player({
   // load audio when videoId changes
   useEffect(() => {
     videoIdRef.current = videoId;
+    setCurrentTime(0);
+    setDuration(0);
+    trueDurationRef.current = 0;
     loadAudio(videoId);
   }, [videoId]);
 

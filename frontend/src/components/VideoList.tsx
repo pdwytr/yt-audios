@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { Video, ProgressData } from "../types";
 import { getPlaylistVideos, getProgress, refreshPlaylist } from "../api";
 
@@ -30,6 +30,11 @@ export default function VideoList({
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(true);
   const [currentVideoId, setCurrentVideoId] = useState<string | null>(null);
+  const activeRef = useCallback((node: HTMLDivElement | null) => {
+    if (node) {
+      setTimeout(() => node.scrollIntoView({ block: "center", behavior: "smooth" }), 100);
+    }
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -88,6 +93,7 @@ export default function VideoList({
           {videos.map((v, i) => (
             <div
               key={v.video_id}
+              ref={v.video_id === currentVideoId ? activeRef : undefined}
               className={`list-item${v.video_id === currentVideoId ? " active" : ""}`}
               onClick={() => onSelect(v.video_id)}
             >
