@@ -5,7 +5,7 @@ build:
 	go build -o yt-audios .
 
 dev-backend:
-	go run main.go
+	go run .
 
 dev-frontend:
 	cd frontend && npm run dev

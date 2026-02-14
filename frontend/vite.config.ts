@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       '/audio': 'http://localhost:8080',
       '/stream': 'http://localhost:8080',
+      '/api': 'http://localhost:8080',
     },
   },
 })

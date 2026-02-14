@@ -41,6 +41,36 @@ func main() {
 	}
 	defer os.RemoveAll(tmpDir)
 
+	// init data store (DATA_DIR env, or next to binary)
+	dataDir := os.Getenv("DATA_DIR")
+	if dataDir == "" {
+		exe, _ := os.Executable()
+		dataDir = filepath.Dir(exe)
+	}
+	store, err := NewStore(dataDir)
+	if err != nil {
+		log.Fatalf("failed to init store: %v", err)
+	}
+
+	// init auth (look in CWD by default, since go run uses a temp dir for the binary)
+	usersFile := os.Getenv("USERS_FILE")
+	if usersFile == "" {
+		usersFile = "users.csv"
+	}
+	auth := NewAuth(usersFile)
+
+	// pre-seed playlists
+	seedPlaylists := []struct{ id, url string }{
+		{"PLG9sUy3Uhal1lLZwkmhlQY7dlgFd1dpEW", "https://www.youtube.com/playlist?list=PLG9sUy3Uhal1lLZwkmhlQY7dlgFd1dpEW"},
+		{"PLG9sUy3Uhal32ob-6jAw3vfa4rFKLyB73", "https://www.youtube.com/playlist?list=PLG9sUy3Uhal32ob-6jAw3vfa4rFKLyB73"},
+	}
+	for _, sp := range seedPlaylists {
+		if pl := store.GetPlaylist(sp.id); pl == nil {
+			store.AddPlaylist(sp.id, sp.url)
+			go fetchPlaylistVideos(store, sp.id, sp.url)
+		}
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -53,6 +83,14 @@ func main() {
 	http.Handle("/", http.FileServer(http.FS(distSub)))
 	http.HandleFunc("/audio", handleAudio)
 	http.HandleFunc("/stream", handleStream)
+
+	// API routes
+	http.HandleFunc("/api/login", handleLogin(auth, store))
+	http.HandleFunc("/api/profiles", handleProfiles(store))
+	http.HandleFunc("/api/playlists", handlePlaylists(store))
+	http.HandleFunc("/api/playlists/videos", handlePlaylistVideos(store))
+	http.HandleFunc("/api/playlists/refresh", handlePlaylistRefresh(store))
+	http.HandleFunc("/api/progress", handleProgress(store))
 
 	log.Printf("Listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
@@ -73,15 +111,16 @@ func handleAudio(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// get metadata
-	cmd := exec.CommandContext(ctx, "yt-dlp",
+	args := append([]string{
 		"-f", "bestaudio[ext=m4a]/bestaudio[acodec=aac]/bestaudio",
 		"--format-sort", "ext:m4a:mp4:webm",
 		"--print", "%(duration)s",
 		"--print", "%(title)s",
 		"--print", "%(id)s",
 		"--no-playlist",
-		ytURL,
-	)
+	}, cookieArgs()...)
+	args = append(args, ytURL)
+	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 
 	out, err := cmd.Output()
 	if err != nil {
@@ -130,14 +169,15 @@ func downloadAudio(videoID, ytURL string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "yt-dlp",
+	dlArgs := append([]string{
 		"-f", "bestaudio[ext=m4a]/bestaudio[acodec=aac]/bestaudio",
 		"--format-sort", "ext:m4a:mp4:webm",
 		"-o", filePath,
 		"--no-part",
 		"--no-playlist",
-		ytURL,
-	)
+	}, cookieArgs()...)
+	dlArgs = append(dlArgs, ytURL)
+	cmd := exec.CommandContext(ctx, "yt-dlp", dlArgs...)
 
 	start := time.Now()
 	out, err := cmd.CombinedOutput()
@@ -176,6 +216,20 @@ func handleStream(w http.ResponseWriter, r *http.Request) {
 
 	// http.ServeFile handles Range requests, Content-Length, etc. automatically
 	http.ServeFile(w, r, filePath)
+}
+
+// cookieArgs returns yt-dlp cookie flags.
+// YT_COOKIES=cookies.txt  → --cookies cookies.txt
+// YT_BROWSER=chrome        → --cookies-from-browser chrome
+// Both unset               → no cookie args
+func cookieArgs() []string {
+	if f := os.Getenv("YT_COOKIES"); f != "" {
+		return []string{"--cookies", f}
+	}
+	if b := os.Getenv("YT_BROWSER"); b != "" && b != "none" {
+		return []string{"--cookies-from-browser", b}
+	}
+	return nil
 }
 
 func init() {

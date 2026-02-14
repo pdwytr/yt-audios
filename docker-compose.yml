@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data         # persists data.json
+      - ./cookies.txt:/app/cookies.txt:ro  # mount cookies (optional)
+    environment:
+      - DATA_DIR=/app/data
+      - YT_COOKIES=/app/cookies.txt  # remove this line if not using cookies
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - app
