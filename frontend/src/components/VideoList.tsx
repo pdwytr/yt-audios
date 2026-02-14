@@ -82,9 +82,6 @@ export default function VideoList({
           &larr;
         </button>
         <h1>{title || playlistId}</h1>
-        <button className="btn-refresh" onClick={handleRefresh} disabled={loading}>
-          Refresh
-        </button>
       </div>
       {loading ? (
         <div className="status">Loading...</div>
