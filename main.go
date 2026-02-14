@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -25,6 +26,31 @@ var downloads sync.Map
 
 // directory for downloaded audio files (persists across restarts)
 var audioDir string
+
+// botDetectedAt records the last time YouTube bot detection was seen
+var botDetectedAt atomic.Pointer[time.Time]
+
+// isBotDetection checks if yt-dlp output contains bot detection signals
+func isBotDetection(output string) bool {
+	patterns := []string{
+		"Sign in to confirm you're not a bot",
+		"Sign in to confirm your age",
+		"HTTP Error 429",
+		"This request was detected as a bot",
+	}
+	for _, p := range patterns {
+		if strings.Contains(output, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func markBotDetected() {
+	now := time.Now()
+	botDetectedAt.Store(&now)
+	log.Println("[BOT DETECTED] YouTube is blocking requests — cookies may need to be refreshed")
+}
 
 type AudioInfo struct {
 	VideoID  string  `json:"video_id"`
@@ -69,7 +95,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	http.Handle("/", http.FileServer(http.FS(distSub)))
+	http.Handle("/", spaHandler(http.FS(distSub)))
 	http.HandleFunc("/audio", handleAudio)
 	http.HandleFunc("/stream", handleStream)
 
@@ -82,6 +108,7 @@ func main() {
 	http.HandleFunc("/api/playlists/videos", auth.middleware(handlePlaylistVideos(store)))
 	http.HandleFunc("/api/playlists/refresh", auth.middleware(handlePlaylistRefresh(store)))
 	http.HandleFunc("/api/progress", auth.middleware(handleProgress(store)))
+	http.HandleFunc("/api/status", handleStatus)
 
 	log.Printf("Listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
@@ -120,6 +147,11 @@ func handleAudio(w http.ResponseWriter, r *http.Request) {
 			stderr = string(ee.Stderr)
 		}
 		log.Printf("yt-dlp error: %v | stderr: %s", err, stderr)
+		if isBotDetection(stderr) {
+			markBotDetected()
+			http.Error(w, `{"error":"bot_detected"}`, http.StatusServiceUnavailable)
+			return
+		}
 		http.Error(w, `{"error":"failed to extract audio"}`, http.StatusInternalServerError)
 		return
 	}
@@ -174,6 +206,9 @@ func downloadAudio(videoID, ytURL string) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("download error for %s: %v | output: %s", videoID, err, string(out))
+		if isBotDetection(string(out)) {
+			markBotDetected()
+		}
 		os.Remove(filePath)
 		return
 	}
@@ -227,4 +262,22 @@ func init() {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		fmt.Fprintln(os.Stderr, "WARNING: yt-dlp not found in PATH")
 	}
+}
+
+// spaHandler serves static files from the embedded FS, falling back to
+// index.html for any path that doesn't match a real file (SPA client routing).
+func spaHandler(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// try to open the file; if it exists, serve it
+		f, err := fsys.Open(r.URL.Path)
+		if err == nil {
+			f.Close()
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+		// file not found — serve index.html for client-side routing
+		r.URL.Path = "/"
+		fileServer.ServeHTTP(w, r)
+	})
 }

@@ -70,10 +70,10 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
   return (
     <div className="view-container">
       <div className="header-row">
-        <button className="btn-back" onClick={onBack} title="Log out">
-          &larr;
-        </button>
         <h1>{localStorage.getItem("yt-audios-profile") || "Playlists"}</h1>
+        <button className="btn-logout" onClick={onBack}>
+          Logout
+        </button>
       </div>
       {playlists.length < 3 && (
         <div className="input-row" style={{ marginBottom: 16 }}>

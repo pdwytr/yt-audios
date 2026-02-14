@@ -104,7 +104,12 @@ export default function Player({
       audio.playbackRate = speed;
       audio.play().catch(() => {});
     } catch (e) {
-      setStatus("Error: " + (e as Error).message);
+      const msg = (e as Error).message;
+      if (msg === "bot_detected") {
+        setStatus("YouTube is blocking requests — cookies may need to be refreshed");
+        return;
+      }
+      setStatus("Error: " + msg);
       // auto-skip to next track on error after a short delay
       const idx = playlist.findIndex((v) => v.video_id === vid);
       if (idx >= 0 && idx < playlist.length - 1) {

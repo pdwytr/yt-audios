@@ -4,12 +4,33 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os/exec"
 	"strings"
 	"time"
 )
+
+func handleStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	detected := false
+	detectedAt := ""
+	if t := botDetectedAt.Load(); t != nil {
+		if time.Since(*t) < 30*time.Minute {
+			detected = true
+			detectedAt = t.Format(time.RFC3339)
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"bot_detected":    detected,
+		"bot_detected_at": detectedAt,
+	})
+}
 
 func handleChannels(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -55,6 +76,10 @@ func handlePlaylists(store *Store) http.HandlerFunc {
 			channelID, err := validatePlaylistChannel(body.URL)
 			if err != nil {
 				log.Printf("channel validation error: %v", err)
+				if err == errBotDetected {
+					http.Error(w, `{"error":"bot_detected"}`, http.StatusServiceUnavailable)
+					return
+				}
 				http.Error(w, `{"error":"failed to validate playlist channel"}`, http.StatusInternalServerError)
 				return
 			}
@@ -207,6 +232,8 @@ func extractPlaylistID(url string) string {
 	return ""
 }
 
+var errBotDetected = fmt.Errorf("bot_detected")
+
 func validatePlaylistChannel(url string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -222,6 +249,14 @@ func validatePlaylistChannel(url string) (string, error) {
 
 	out, err := cmd.Output()
 	if err != nil {
+		stderr := ""
+		if ee, ok := err.(*exec.ExitError); ok {
+			stderr = string(ee.Stderr)
+		}
+		if isBotDetection(stderr) {
+			markBotDetected()
+			return "", errBotDetected
+		}
 		return "", err
 	}
 
@@ -252,6 +287,9 @@ func fetchPlaylistVideos(store *Store, id, url string) {
 		store.SetFetching(id, false)
 		return
 	}
+
+	var stderrBuf strings.Builder
+	cmd.Stderr = &stderrBuf
 
 	if err := cmd.Start(); err != nil {
 		log.Printf("playlist fetch start error for %s: %v", id, err)
@@ -288,6 +326,9 @@ func fetchPlaylistVideos(store *Store, id, url string) {
 
 	if err := cmd.Wait(); err != nil {
 		log.Printf("playlist fetch error for %s: %v", id, err)
+		if isBotDetection(stderrBuf.String()) {
+			markBotDetected()
+		}
 	}
 
 	// don't overwrite existing cache if fetch returned nothing

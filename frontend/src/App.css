@@ -24,6 +24,12 @@ body {
   flex-shrink: 0;
 }
 .btn-back:hover { border-color: #e94560; color: #e94560; }
+.btn-logout {
+  background: none; border: 1px solid #2a2a4a; border-radius: 8px;
+  color: #808090; cursor: pointer; padding: 4px 12px; font-size: 12px;
+  flex-shrink: 0;
+}
+.btn-logout:hover { border-color: #e94560; color: #e94560; }
 .btn-refresh {
   background: none; border: 1px solid #2a2a4a; border-radius: 8px;
   color: #a0a0c0; cursor: pointer; padding: 6px 12px; font-size: 12px;
