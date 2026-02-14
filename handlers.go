@@ -45,6 +45,12 @@ func handlePlaylists(store *Store) http.HandlerFunc {
 				return
 			}
 
+			// check playlist limit
+			if len(store.ListUserPlaylists(username)) >= 3 {
+				http.Error(w, `{"error":"playlist limit reached (max 3)"}`, http.StatusBadRequest)
+				return
+			}
+
 			// validate channel whitelist
 			channelID, err := validatePlaylistChannel(body.URL)
 			if err != nil {
@@ -282,6 +288,13 @@ func fetchPlaylistVideos(store *Store, id, url string) {
 
 	if err := cmd.Wait(); err != nil {
 		log.Printf("playlist fetch error for %s: %v", id, err)
+	}
+
+	// don't overwrite existing cache if fetch returned nothing
+	if len(videos) == 0 {
+		log.Printf("playlist fetch for %s returned 0 videos, keeping existing cache", id)
+		store.SetFetching(id, false)
+		return
 	}
 
 	if playlistTitle == "" {
