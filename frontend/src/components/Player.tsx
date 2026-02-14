@@ -100,9 +100,9 @@ export default function Player({
         // no progress saved yet
       }
 
+      setStatus("Buffering...");
       audio.playbackRate = speed;
       audio.play().catch(() => {});
-      setStatus("");
     } catch (e) {
       setStatus("Error: " + (e as Error).message);
       // auto-skip to next track on error after a short delay
@@ -221,6 +221,8 @@ export default function Player({
     };
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
+    const onPlaying = () => { setStatus(""); setLoading(false); };
+    const onWaiting = () => setStatus("Buffering...");
     const onError = () => setStatus("Playback error");
 
     audio.addEventListener("timeupdate", onTimeUpdate);
@@ -229,6 +231,8 @@ export default function Player({
     audio.addEventListener("durationchange", onMeta);
     audio.addEventListener("play", onPlay);
     audio.addEventListener("pause", onPause);
+    audio.addEventListener("playing", onPlaying);
+    audio.addEventListener("waiting", onWaiting);
     audio.addEventListener("error", onError);
 
     return () => {
@@ -238,6 +242,8 @@ export default function Player({
       audio.removeEventListener("durationchange", onMeta);
       audio.removeEventListener("play", onPlay);
       audio.removeEventListener("pause", onPause);
+      audio.removeEventListener("playing", onPlaying);
+      audio.removeEventListener("waiting", onWaiting);
       audio.removeEventListener("error", onError);
     };
   }, [getDuration, playlist, onChangeVideo]);

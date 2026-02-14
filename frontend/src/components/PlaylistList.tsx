@@ -62,6 +62,7 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
   }
 
   async function handleDelete(id: string) {
+    if (!window.confirm("Remove this playlist?")) return;
     await deletePlaylist(id);
     await load();
   }
@@ -72,21 +73,26 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
         <button className="btn-back" onClick={onBack} title="Log out">
           &larr;
         </button>
-        <h1>Playlists</h1>
+        <h1>{localStorage.getItem("yt-audios-profile") || "Playlists"}</h1>
       </div>
-      <div className="input-row" style={{ marginBottom: 16 }}>
-        <input
-          type="text"
-          value={newUrl}
-          onChange={(e) => setNewUrl(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-          placeholder="Paste playlist URL..."
-          disabled={adding}
-        />
-        <button onClick={handleAdd} disabled={adding || !newUrl.trim()}>
-          {adding ? "Adding..." : "Add"}
-        </button>
-      </div>
+      {playlists.length < 3 && (
+        <div className="input-row" style={{ marginBottom: 16 }}>
+          <input
+            type="text"
+            value={newUrl}
+            onChange={(e) => setNewUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+            placeholder="Paste playlist URL..."
+            disabled={adding}
+          />
+          <button onClick={handleAdd} disabled={adding || !newUrl.trim()}>
+            {adding ? "Adding..." : "Add"}
+          </button>
+        </div>
+      )}
+      {!loading && (
+        <div className="playlist-limit">{playlists.length}/3 playlists</div>
+      )}
       {error && <div className="status" style={{ marginBottom: 12 }}>{error}</div>}
       {loading ? (
         <div className="status">Loading...</div>

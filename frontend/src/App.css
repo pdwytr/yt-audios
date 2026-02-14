@@ -179,6 +179,11 @@ h1 { font-size: 18px; text-align: center; margin-bottom: 20px; color: #a0a0c0; }
   text-align: center; margin-top: 8px; font-size: 11px; color: #606080;
 }
 
+/* playlist limit */
+.playlist-limit {
+  text-align: right; font-size: 11px; color: #606080; margin-bottom: 8px;
+}
+
 /* channels info */
 .channels-info {
   margin-top: 16px; font-size: 12px; color: #606080;
