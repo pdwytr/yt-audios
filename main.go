@@ -23,8 +23,8 @@ var distFS embed.FS
 // tracks in-progress downloads: videoID -> channel that closes when done
 var downloads sync.Map
 
-// temp directory for downloaded audio files
-var tmpDir string
+// directory for downloaded audio files (persists across restarts)
+var audioDir string
 
 type AudioInfo struct {
 	VideoID  string  `json:"video_id"`
@@ -33,18 +33,16 @@ type AudioInfo struct {
 }
 
 func main() {
-	// create a temp directory for audio files
-	var err error
-	tmpDir, err = os.MkdirTemp("", "yt-audios-*")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
-
 	// init data store (DATA_DIR env, or ./data in CWD)
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir == "" {
 		dataDir = "data"
+	}
+
+	// audio cache directory (persists across restarts)
+	audioDir = filepath.Join(dataDir, "audio")
+	if err := os.MkdirAll(audioDir, 0755); err != nil {
+		log.Fatal(err)
 	}
 	channelsFile := os.Getenv("CHANNELS_FILE")
 	if channelsFile == "" {
@@ -88,7 +86,7 @@ func main() {
 }
 
 func audioPath(videoID string) string {
-	return filepath.Join(tmpDir, videoID+".m4a")
+	return filepath.Join(audioDir, videoID+".m4a")
 }
 
 func handleAudio(w http.ResponseWriter, r *http.Request) {
