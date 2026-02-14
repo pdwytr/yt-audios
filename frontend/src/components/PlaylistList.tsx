@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import type { PlaylistSummary, Channel, ProgressData } from "../types";
+import type { PlaylistSummary, Channel } from "../types";
 import { listPlaylists, addPlaylist, deletePlaylist, listChannels, getProgress } from "../api";
 
 interface Props {

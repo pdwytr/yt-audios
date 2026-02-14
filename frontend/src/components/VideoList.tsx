@@ -38,6 +38,7 @@ export default function VideoList({
         const [pl, progress] = await Promise.all([
           getPlaylistVideos(playlistId),
           getProgress().catch((): ProgressData => ({
+            playlist_id: "",
             video_id: "",
             timestamp: 0,
             positions: {},

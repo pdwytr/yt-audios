@@ -36,6 +36,27 @@ export async function login(
   return res.json();
 }
 
+export async function register(
+  username: string,
+  password: string
+): Promise<{ token: string; username: string }> {
+  const res = await fetch("/api/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error || "Registration failed");
+  }
+  return res.json();
+}
+
+export async function getRegisterInfo(): Promise<{ remaining: number }> {
+  const res = await fetch("/api/register/info");
+  return res.json();
+}
+
 export async function listChannels(): Promise<Channel[]> {
   const res = await fetch("/api/channels");
   return res.json();

@@ -75,6 +75,8 @@ func main() {
 
 	// API routes
 	http.HandleFunc("/api/login", handleLogin(auth))
+	http.HandleFunc("/api/register", handleRegister(auth))
+	http.HandleFunc("/api/register/info", handleRegisterInfo(auth))
 	http.HandleFunc("/api/channels", handleChannels(store))
 	http.HandleFunc("/api/playlists", auth.middleware(handlePlaylists(store)))
 	http.HandleFunc("/api/playlists/videos", auth.middleware(handlePlaylistVideos(store)))
