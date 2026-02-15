@@ -56,7 +56,9 @@ This builds the React frontend, embeds it into the Go binary, and produces a sin
 
 ## Docker Deployment
 
-### 1. Export cookies
+### 1. Export cookies (on your local machine)
+
+The export script needs a browser with an active YouTube session, so it must run locally — not on the server.
 
 ```bash
 ./export-cookies.sh           # defaults to Chrome
@@ -92,7 +94,7 @@ When you see "bot detected" errors, just re-export cookies — no restart needed
 
 ### VPS deployment
 
-**Initial setup** — clone the repo, copy data and cookies, then start:
+**Initial setup** — clone the repo on the server, then copy `data/` and `cookies.txt` from your local machine. The `data/` directory contains user credentials and playlists, so it must be transferred on first deploy.
 
 ```bash
 # clone on server
@@ -112,7 +114,7 @@ ssh user@server "cd yt-audios && docker compose up --build -d"
 ssh user@server "cd yt-audios && git pull && docker compose up --build -d"
 ```
 
-**Cookie refresh** — YouTube cookies expire every few hours. Re-export locally and push to the server. No restart needed, yt-dlp reads the file fresh on every call.
+**Cookie refresh** — YouTube cookies expire every few hours. Re-export on your local machine (where the browser is) and SCP to the server. No restart needed, yt-dlp reads the file fresh on every call.
 
 ```bash
 ./export-cookies.sh
