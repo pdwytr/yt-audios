@@ -17,6 +17,7 @@ body {
 .header-row h1 {
   font-size: 18px; color: #a0a0c0; flex: 1;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-align: left; margin-bottom: 0;
 }
 .btn-back {
   background: none; border: 1px solid #2a2a4a; border-radius: 8px;
@@ -80,7 +81,7 @@ h1 { font-size: 18px; text-align: center; margin-bottom: 20px; color: #a0a0c0; }
   display: flex; gap: 8px;
 }
 .input-row input {
-  flex: 1; padding: 10px 12px; border: 1px solid #2a2a4a; border-radius: 8px;
+  flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid #2a2a4a; border-radius: 8px;
   background: #0f3460; color: #e0e0e0; font-size: 14px; outline: none;
 }
 .input-row input:focus { border-color: #e94560; }

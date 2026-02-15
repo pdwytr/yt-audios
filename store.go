@@ -52,13 +52,12 @@ type ProgressData struct {
 type Store struct {
 	mu               sync.RWMutex
 	dataDir          string
-	channelsFile     string
 	playlists        []UserPlaylist            // from playlists.csv
 	videos           map[string][]Video        // playlistID -> videos, from videos.csv
 	fetchingPlaylists sync.Map                 // playlistID -> chan struct{} (transient)
 }
 
-func NewStore(dataDir, channelsFile string) (*Store, error) {
+func NewStore(dataDir string) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
@@ -68,9 +67,8 @@ func NewStore(dataDir, channelsFile string) (*Store, error) {
 	}
 
 	s := &Store{
-		dataDir:      dataDir,
-		channelsFile: channelsFile,
-		videos:       make(map[string][]Video),
+		dataDir: dataDir,
+		videos:  make(map[string][]Video),
 	}
 
 	if err := s.loadPlaylists(); err != nil && !os.IsNotExist(err) {
@@ -85,7 +83,7 @@ func NewStore(dataDir, channelsFile string) (*Store, error) {
 // --- Channels ---
 
 func (s *Store) LoadChannels() ([]Channel, error) {
-	f, err := os.Open(s.channelsFile)
+	f, err := os.Open(filepath.Join(s.dataDir, "channels.csv"))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil

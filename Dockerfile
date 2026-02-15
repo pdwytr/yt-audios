@@ -17,12 +17,8 @@ RUN apk add --no-cache python3 py3-pip ffmpeg \
     && pip3 install --break-system-packages yt-dlp
 WORKDIR /app
 COPY --from=backend /app/yt-audios .
-COPY users.csv ./
-COPY channels.csv ./
 EXPOSE 8080
 VOLUME ["/app/data"]
 ENV DATA_DIR=/app/data
-ENV USERS_FILE=/app/users.csv
-ENV CHANNELS_FILE=/app/channels.csv
 ENV YT_COOKIES=""
 CMD ["./yt-audios"]

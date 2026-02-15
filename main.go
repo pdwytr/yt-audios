@@ -70,21 +70,12 @@ func main() {
 	if err := os.MkdirAll(audioDir, 0755); err != nil {
 		log.Fatal(err)
 	}
-	channelsFile := os.Getenv("CHANNELS_FILE")
-	if channelsFile == "" {
-		channelsFile = "channels.csv"
-	}
-	store, err := NewStore(dataDir, channelsFile)
+	store, err := NewStore(dataDir)
 	if err != nil {
 		log.Fatalf("failed to init store: %v", err)
 	}
 
-	// init auth (look in CWD by default, since go run uses a temp dir for the binary)
-	usersFile := os.Getenv("USERS_FILE")
-	if usersFile == "" {
-		usersFile = "users.csv"
-	}
-	auth := NewAuth(usersFile)
+	auth := NewAuth(filepath.Join(dataDir, "users.csv"))
 
 	port := os.Getenv("PORT")
 	if port == "" {
