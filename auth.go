@@ -209,7 +209,7 @@ func handleRegister(auth *Auth) http.HandlerFunc {
 	}
 }
 
-const maxUsers = 10
+const maxUsers = 20
 
 func handleRegisterInfo(auth *Auth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
