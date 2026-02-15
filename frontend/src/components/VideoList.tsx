@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import type { Video, ProgressData } from "../types";
-import { getPlaylistVideos, getProgress, refreshPlaylist } from "../api";
+import { getPlaylistVideos, getProgress } from "../api";
 
 interface Props {
   playlistId: string;
@@ -59,21 +59,6 @@ export default function VideoList({
     }
     load();
   }, [playlistId]);
-
-  async function handleRefresh() {
-    setLoading(true);
-    await refreshPlaylist(playlistId);
-    // poll until fetching is done
-    const poll = setInterval(async () => {
-      const pl = await getPlaylistVideos(playlistId);
-      if (!pl.fetching) {
-        clearInterval(poll);
-        setVideos(pl.videos || []);
-        setTitle(pl.title);
-        setLoading(false);
-      }
-    }, 3000);
-  }
 
   return (
     <div className="view-container">
