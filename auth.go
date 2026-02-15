@@ -8,9 +8,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 )
+
+var alphanumeric = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 
 type contextKey string
 
@@ -174,6 +177,14 @@ func handleRegister(auth *Auth) http.HandlerFunc {
 		}
 		if len(body.Password) < 4 {
 			http.Error(w, `{"error":"password must be at least 4 characters"}`, http.StatusBadRequest)
+			return
+		}
+		if !alphanumeric.MatchString(username) {
+			http.Error(w, `{"error":"username must be alphanumeric only"}`, http.StatusBadRequest)
+			return
+		}
+		if !alphanumeric.MatchString(body.Password) {
+			http.Error(w, `{"error":"password must be alphanumeric only"}`, http.StatusBadRequest)
 			return
 		}
 		if auth.userCount() >= maxUsers {
