@@ -20,5 +20,5 @@ COPY --from=backend /app/yt-audios .
 EXPOSE 8080
 VOLUME ["/app/data"]
 ENV DATA_DIR=/app/data
-ENV YT_COOKIES=""
+ENV YT_COOKIES=/app/cookies.txt
 CMD ["./yt-audios"]

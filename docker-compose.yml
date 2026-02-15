@@ -5,10 +5,10 @@ services:
       - "8080:8080"
     volumes:
       - ./data:/app/data
-      - ./cookies.txt:/app/cookies.txt:ro  # mount cookies (optional)
+      - ./cookies.txt:/app/cookies.txt:ro
     environment:
       - DATA_DIR=/app/data
-      - YT_COOKIES=/app/cookies.txt  # remove if not using cookies
+      - YT_COOKIES=/app/cookies.txt
 
   tunnel:
     image: cloudflare/cloudflared:latest
