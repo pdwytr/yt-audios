@@ -62,7 +62,6 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Remove this playlist?")) return;
     await deletePlaylist(id);
     await load();
   }
@@ -70,10 +69,10 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
   return (
     <div className="view-container">
       <div className="header-row">
-        <h1>{localStorage.getItem("yt-audios-profile") || "Playlists"}</h1>
-        <button className="btn-logout" onClick={onBack}>
-          Logout
+        <button className="btn-back" onClick={onBack} title="Log out">
+          &larr;
         </button>
+        <h1>{localStorage.getItem("yt-audios-profile") || "Playlists"}</h1>
       </div>
       {playlists.length < 3 && (
         <div className="input-row" style={{ marginBottom: 16 }}>
