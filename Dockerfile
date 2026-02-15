@@ -13,8 +13,9 @@ COPY --from=frontend /app/frontend/dist ./frontend/dist
 RUN go build -o yt-audios .
 
 FROM alpine:3.21
-RUN apk add --no-cache python3 py3-pip ffmpeg \
-    && pip3 install --break-system-packages yt-dlp
+RUN apk add --no-cache python3 py3-pip ffmpeg nodejs \
+    && pip3 install --break-system-packages "yt-dlp[default]" \
+    && mkdir -p /etc && echo "--js-runtimes node" > /etc/yt-dlp.conf
 WORKDIR /app
 COPY --from=backend /app/yt-audios .
 EXPOSE 8080
