@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { login, register, getRegisterInfo } from "../api";
+import { login, register, getRegisterInfo, setToken } from "../api";
 
 interface Props {
   onLogin: () => void;
@@ -27,7 +27,7 @@ export default function Login({ onLogin }: Props) {
     try {
       const fn = isRegister ? register : login;
       const result = await fn(username.trim(), password);
-      localStorage.setItem("yt-audios-token", result.token);
+      setToken(result.token);
       localStorage.setItem("yt-audios-profile", result.username);
       onLogin();
     } catch (err) {

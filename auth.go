@@ -61,6 +61,11 @@ func (a *Auth) createSession(username string) string {
 	token := hex.EncodeToString(b)
 
 	a.mu.Lock()
+	for t, u := range a.sessions {
+		if u == username {
+			delete(a.sessions, t)
+		}
+	}
 	a.sessions[token] = username
 	a.mu.Unlock()
 	return token

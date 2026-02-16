@@ -4,9 +4,9 @@ import Login from "./components/Login";
 import PlaylistList from "./components/PlaylistList";
 import VideoList from "./components/VideoList";
 import Player from "./components/Player";
+import { setToken, getToken } from "./api";
 import "./App.css";
 
-const TOKEN_KEY = "yt-audios-token";
 const PROFILE_KEY = "yt-audios-profile";
 
 function viewToPath(view: View): string {
@@ -33,7 +33,7 @@ function pathToView(path: string): View | null {
 }
 
 function getInitialView(): View {
-  const token = localStorage.getItem(TOKEN_KEY);
+  const token = getToken();
   if (!token) return { page: "login" };
 
   const fromUrl = pathToView(window.location.pathname);
@@ -68,7 +68,7 @@ export default function App() {
       } else {
         // fallback: parse URL
         const fromUrl = pathToView(window.location.pathname);
-        const token = localStorage.getItem(TOKEN_KEY);
+        const token = getToken();
         setView(fromUrl && token ? fromUrl : token ? { page: "playlists" } : { page: "login" });
       }
     };
@@ -91,8 +91,8 @@ export default function App() {
             navigate({ page: "videos", playlistId })
           }
           onBack={() => {
+            setToken(null);
             localStorage.removeItem(PROFILE_KEY);
-            localStorage.removeItem(TOKEN_KEY);
             navigate({ page: "login" }, true);
           }}
         />

@@ -1,8 +1,57 @@
 import type { PlaylistSummary, Playlist, ProgressData, AudioInfo, Channel } from "./types";
 
-function getToken(): string | null {
-  return localStorage.getItem("yt-audios-token");
+const TOKEN_KEY = "yt-audios-token";
+const TAB_ID_KEY = "yt-audios-tab-id";
+
+let currentToken: string | null = null;
+let tabId: string | null = null;
+
+// On load: claim active tab or detect we were kicked by another tab
+const storedToken = localStorage.getItem(TOKEN_KEY);
+const activeTabId = localStorage.getItem(TAB_ID_KEY);
+const myTabId = sessionStorage.getItem(TAB_ID_KEY);
+
+if (storedToken) {
+  if (myTabId && activeTabId && myTabId !== activeTabId) {
+    // Another tab took over while we were away — stay logged out
+    currentToken = null;
+    sessionStorage.removeItem(TAB_ID_KEY);
+  } else {
+    // Fresh tab or we're the active tab — claim ownership
+    currentToken = storedToken;
+    tabId = Math.random().toString(36).slice(2);
+    sessionStorage.setItem(TAB_ID_KEY, tabId);
+    localStorage.setItem(TAB_ID_KEY, tabId);
+  }
 }
+
+export function getToken(): string | null {
+  return currentToken;
+}
+
+export function setToken(token: string | null): void {
+  currentToken = token;
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, token);
+    tabId = Math.random().toString(36).slice(2);
+    sessionStorage.setItem(TAB_ID_KEY, tabId);
+    localStorage.setItem(TAB_ID_KEY, tabId);
+  } else {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TAB_ID_KEY);
+    sessionStorage.removeItem(TAB_ID_KEY);
+    tabId = null;
+  }
+}
+
+// When another tab claims the session, kick this tab
+window.addEventListener("storage", (e) => {
+  if (e.key === TAB_ID_KEY && tabId && e.newValue !== tabId) {
+    currentToken = null;
+    tabId = null;
+    window.location.reload();
+  }
+});
 
 async function authFetch(url: string, init?: RequestInit): Promise<Response> {
   const token = getToken();
@@ -12,7 +61,7 @@ async function authFetch(url: string, init?: RequestInit): Promise<Response> {
   }
   const res = await fetch(url, { ...init, headers });
   if (res.status === 401) {
-    localStorage.removeItem("yt-audios-token");
+    setToken(null);
     localStorage.removeItem("yt-audios-profile");
     window.location.reload();
     throw new Error("Unauthorized");
