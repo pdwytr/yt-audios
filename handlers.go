@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -43,6 +44,71 @@ func handleChannels(store *Store) http.HandlerFunc {
 	}
 }
 
+type suggestion struct {
+	ID  string
+	URL string
+}
+
+var suggestions = []suggestion{
+	{"PLG9sUy3Uhal32ob-6jAw3vfa4rFKLyB73", "https://www.youtube.com/playlist?list=PLG9sUy3Uhal32ob-6jAw3vfa4rFKLyB73"},
+	{"PLw1xdVUlD8s9IzPvCxRAd-pjD9TmVbmgJ", "https://www.youtube.com/playlist?list=PLw1xdVUlD8s9IzPvCxRAd-pjD9TmVbmgJ"},
+	{"PLgpPOIQ2eEw12q7M3psgZeVHolRZmQ7-9", "https://www.youtube.com/watch?v=gvzLUFWxMKw&list=PLgpPOIQ2eEw12q7M3psgZeVHolRZmQ7-9"},
+	{"PLgpPOIQ2eEw1i4N657XD9p8pZ1fsAMgfd", "https://www.youtube.com/playlist?list=PLgpPOIQ2eEw1i4N657XD9p8pZ1fsAMgfd"},
+	{"PLgpPOIQ2eEw0i-570pwDeqaYjT0KY8ybP", "https://www.youtube.com/playlist?list=PLgpPOIQ2eEw0i-570pwDeqaYjT0KY8ybP"},
+	{"PLgpPOIQ2eEw0qlHfQ5sffH3YTd2xUtLE2", "https://www.youtube.com/playlist?list=PLgpPOIQ2eEw0qlHfQ5sffH3YTd2xUtLE2"},
+	{"PLgpPOIQ2eEw0EjP1_rOFRT7sIEovobIni", "https://www.youtube.com/playlist?list=PLgpPOIQ2eEw0EjP1_rOFRT7sIEovobIni"},
+}
+
+// suggestionTitles caches fetched titles for suggestions
+var suggestionTitles sync.Map
+
+// fetchSuggestionTitles fetches titles for suggestions missing from the store
+func fetchSuggestionTitles(store *Store) {
+	for _, s := range suggestions {
+		if store.GetPlaylistTitle(s.ID) != "" {
+			continue
+		}
+		result, err := validatePlaylistChannel(s.URL)
+		if err != nil {
+			log.Printf("failed to fetch suggestion title for %s: %v", s.ID, err)
+			continue
+		}
+		if result.PlaylistTitle != "" {
+			suggestionTitles.Store(s.ID, result.PlaylistTitle)
+			log.Printf("fetched suggestion title: %s → %s", s.ID, result.PlaylistTitle)
+		}
+	}
+}
+
+func handlePlaylistSuggestions(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		type result struct {
+			ID    string `json:"id"`
+			URL   string `json:"url"`
+			Title string `json:"title"`
+		}
+		out := make([]result, len(suggestions))
+		for i, s := range suggestions {
+			title := store.GetPlaylistTitle(s.ID)
+			if title == "" {
+				if t, ok := suggestionTitles.Load(s.ID); ok {
+					title = t.(string)
+				}
+			}
+			if title == "" {
+				title = s.ID
+			}
+			out[i] = result{ID: s.ID, URL: s.URL, Title: title}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(out)
+	}
+}
+
 func handlePlaylists(store *Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := getUser(r)
@@ -73,7 +139,7 @@ func handlePlaylists(store *Store) http.HandlerFunc {
 			}
 
 			// validate channel whitelist
-			channelID, err := validatePlaylistChannel(body.URL)
+			vResult, err := validatePlaylistChannel(body.URL)
 			if err != nil {
 				log.Printf("channel validation error: %v", err)
 				if err == errBotDetected {
@@ -83,12 +149,12 @@ func handlePlaylists(store *Store) http.HandlerFunc {
 				http.Error(w, `{"error":"failed to validate playlist channel"}`, http.StatusInternalServerError)
 				return
 			}
-			if !store.IsChannelAllowed(channelID) {
+			if !store.IsChannelAllowed(vResult.ChannelID) {
 				http.Error(w, `{"error":"channel not whitelisted"}`, http.StatusForbidden)
 				return
 			}
 
-			if err := store.AddUserPlaylist(username, playlistID, body.URL); err != nil {
+			if err := store.AddUserPlaylist(username, playlistID, body.URL, vResult.PlaylistTitle); err != nil {
 				http.Error(w, `{"error":"save failed"}`, http.StatusInternalServerError)
 				return
 			}
@@ -234,7 +300,12 @@ func extractPlaylistID(url string) string {
 
 var errBotDetected = fmt.Errorf("bot_detected")
 
-func validatePlaylistChannel(url string) (string, error) {
+type validationResult struct {
+	ChannelID     string
+	PlaylistTitle string
+}
+
+func validatePlaylistChannel(url string) (validationResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -255,18 +326,19 @@ func validatePlaylistChannel(url string) (string, error) {
 		}
 		if isBotDetection(stderr) {
 			markBotDetected()
-			return "", errBotDetected
+			return validationResult{}, errBotDetected
 		}
-		return "", err
+		return validationResult{}, err
 	}
 
 	var entry struct {
-		ChannelID string `json:"channel_id"`
+		ChannelID     string `json:"channel_id"`
+		PlaylistTitle string `json:"playlist_title"`
 	}
 	if err := json.Unmarshal(out, &entry); err != nil {
-		return "", err
+		return validationResult{}, err
 	}
-	return entry.ChannelID, nil
+	return validationResult{ChannelID: entry.ChannelID, PlaylistTitle: entry.PlaylistTitle}, nil
 }
 
 func fetchPlaylistVideos(store *Store, id, url string) {

@@ -193,7 +193,7 @@ func (s *Store) savePlaylists() error {
 	return os.Rename(tmp, path)
 }
 
-func (s *Store) AddUserPlaylist(username, playlistID, url string) error {
+func (s *Store) AddUserPlaylist(username, playlistID, url, title string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -208,6 +208,7 @@ func (s *Store) AddUserPlaylist(username, playlistID, url string) error {
 		Username:   username,
 		PlaylistID: playlistID,
 		URL:        url,
+		Title:      title,
 	})
 	return s.savePlaylists()
 }
@@ -270,6 +271,17 @@ func (s *Store) UserHasPlaylist(username, playlistID string) bool {
 		}
 	}
 	return false
+}
+
+func (s *Store) GetPlaylistTitle(playlistID string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, p := range s.playlists {
+		if p.PlaylistID == playlistID && p.Title != "" {
+			return p.Title
+		}
+	}
+	return ""
 }
 
 func (s *Store) GetPlaylistURL(playlistID string) string {

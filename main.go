@@ -77,6 +77,9 @@ func main() {
 
 	auth := NewAuth(filepath.Join(dataDir, "users.csv"))
 
+	// fetch missing suggestion titles in background
+	go fetchSuggestionTitles(store)
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -95,6 +98,7 @@ func main() {
 	http.HandleFunc("/api/register", handleRegister(auth))
 	http.HandleFunc("/api/register/info", handleRegisterInfo(auth))
 	http.HandleFunc("/api/channels", handleChannels(store))
+	http.HandleFunc("/api/playlists/suggestions", handlePlaylistSuggestions(store))
 	http.HandleFunc("/api/playlists", auth.middleware(handlePlaylists(store)))
 	http.HandleFunc("/api/playlists/videos", auth.middleware(handlePlaylistVideos(store)))
 	http.HandleFunc("/api/playlists/refresh", auth.middleware(handlePlaylistRefresh(store)))
