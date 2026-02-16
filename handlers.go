@@ -62,22 +62,31 @@ var suggestions = []suggestion{
 // suggestionTitles caches fetched titles for suggestions
 var suggestionTitles sync.Map
 
-// fetchSuggestionTitles fetches titles for suggestions missing from the store
+// fetchSuggestionTitles fetches titles concurrently for suggestions missing from the store
 func fetchSuggestionTitles(store *Store) {
+	var wg sync.WaitGroup
 	for _, s := range suggestions {
 		if store.GetPlaylistTitle(s.ID) != "" {
 			continue
 		}
-		result, err := validatePlaylistChannel(s.URL)
-		if err != nil {
-			log.Printf("failed to fetch suggestion title for %s: %v", s.ID, err)
+		if _, ok := suggestionTitles.Load(s.ID); ok {
 			continue
 		}
-		if result.PlaylistTitle != "" {
-			suggestionTitles.Store(s.ID, result.PlaylistTitle)
-			log.Printf("fetched suggestion title: %s → %s", s.ID, result.PlaylistTitle)
-		}
+		wg.Add(1)
+		go func(s suggestion) {
+			defer wg.Done()
+			result, err := validatePlaylistChannel(s.URL)
+			if err != nil {
+				log.Printf("failed to fetch suggestion title for %s: %v", s.ID, err)
+				return
+			}
+			if result.PlaylistTitle != "" {
+				suggestionTitles.Store(s.ID, result.PlaylistTitle)
+				log.Printf("fetched suggestion title: %s → %s", s.ID, result.PlaylistTitle)
+			}
+		}(s)
 	}
+	wg.Wait()
 }
 
 func handlePlaylistSuggestions(store *Store) http.HandlerFunc {
@@ -91,8 +100,9 @@ func handlePlaylistSuggestions(store *Store) http.HandlerFunc {
 			URL   string `json:"url"`
 			Title string `json:"title"`
 		}
-		out := make([]result, len(suggestions))
-		for i, s := range suggestions {
+		hasMissing := false
+		var out []result
+		for _, s := range suggestions {
 			title := store.GetPlaylistTitle(s.ID)
 			if title == "" {
 				if t, ok := suggestionTitles.Load(s.ID); ok {
@@ -100,9 +110,16 @@ func handlePlaylistSuggestions(store *Store) http.HandlerFunc {
 				}
 			}
 			if title == "" {
-				title = s.ID
+				hasMissing = true
+				continue // skip suggestions without titles
 			}
-			out[i] = result{ID: s.ID, URL: s.URL, Title: title}
+			out = append(out, result{ID: s.ID, URL: s.URL, Title: title})
+		}
+		if hasMissing {
+			go fetchSuggestionTitles(store)
+		}
+		if out == nil {
+			out = []result{}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(out)

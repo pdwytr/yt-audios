@@ -80,12 +80,16 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
     await load();
   }
 
+  const ownedIds = new Set(playlists.map((p) => p.id));
+  const availableSuggestions = suggestions.filter((s) => !ownedIds.has(s.id));
+  const remaining = 3 - playlists.length;
+
   function toggleSuggestion(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
-      } else if (next.size < 3) {
+      } else if (next.size < remaining) {
         next.add(id);
       }
       return next;
@@ -110,24 +114,26 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
     }
   }
 
-  const showSetup = !loading && suggestions.length > 0 &&
+  const showSetup = !loading && availableSuggestions.length > 0 &&
     (showSuggestions || (playlists.length === 0 && !skippedSetup));
 
   if (showSetup) {
     return (
-      <div className="view-container">
+      <div className="view-container" onKeyDown={(e) => {
+        if (e.key === "Enter" && selected.size > 0 && !addingSelected) handleAddSelected();
+      }}>
         <div className="header-row">
           <h1>{localStorage.getItem("yt-audios-profile") || "Playlists"}</h1>
           <button className="btn-logout" onClick={onBack}>
             Logout
           </button>
         </div>
-        <div className="setup-label">Select up to 3 playlists</div>
+        <div className="setup-label">Select up to {remaining} playlist{remaining !== 1 ? "s" : ""}</div>
         {error && <div className="status" style={{ marginBottom: 12 }}>{error}</div>}
         <div className="setup-list">
-          {suggestions.map((s) => {
+          {availableSuggestions.map((s) => {
             const isSelected = selected.has(s.id);
-            const isDisabled = !isSelected && selected.size >= 3;
+            const isDisabled = !isSelected && selected.size >= remaining;
             return (
               <div
                 key={s.id}
@@ -222,7 +228,7 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
           )}
         </div>
       )}
-      {!loading && playlists.length < 3 && suggestions.length > 0 && (
+      {!loading && playlists.length < 3 && availableSuggestions.length > 0 && (
         <div className="suggestions-section">
           <button className="btn-link" onClick={() => setShowSuggestions(true)}>
             Browse suggested playlists

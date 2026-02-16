@@ -57,7 +57,6 @@ body {
 }
 .list-item-title {
   display: block; font-size: 14px; font-weight: 500;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .list-item-sub {
   display: block; font-size: 12px; color: #808090; margin-top: 2px;
@@ -221,16 +220,6 @@ h1 { font-size: 18px; text-align: center; margin-bottom: 20px; color: #a0a0c0; }
   flex: 1; min-width: 0;
 }
 .setup-item:hover { background: #1a4a80; }
-.setup-item:hover .list-item-title {
-  overflow: visible;
-  text-overflow: clip;
-  animation: scroll-title 6s linear infinite;
-}
-@keyframes scroll-title {
-  0%, 15%  { transform: translateX(0); }
-  50%, 65% { transform: translateX(-60%); }
-  100%     { transform: translateX(0); }
-}
 .setup-item.selected {
   background: #1a4a80; border-color: #e94560;
 }
