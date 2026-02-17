@@ -1,4 +1,4 @@
-# YT Audio Player
+# Duroos us Salaf
 
 A web-based YouTube audio player. Paste a YouTube URL, listen to the audio. Go backend + React frontend, ships as a single binary.
 
