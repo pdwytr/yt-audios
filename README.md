@@ -2,6 +2,18 @@
 
 A web-based YouTube audio player. Paste a YouTube URL, listen to the audio. Go backend + React frontend, ships as a single binary.
 
+## Quick: Refresh cookies & deploy to server
+
+```bash
+./export-cookies.sh && scp cookies.txt root@137.184.189.111:/opt/yt-audios/cookies.txt
+```
+
+Auto-refresh every 6 hours (add to `crontab -e` on your local machine):
+
+```bash
+0 */6 * * * cd /Users/pdwytrfa/Documents/projects/yt-audios && ./export-cookies.sh && scp cookies.txt root@137.184.189.111:/opt/yt-audios/cookies.txt
+```
+
 ## Prerequisites
 
 - [Go](https://go.dev/dl/) 1.21+

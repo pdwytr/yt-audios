@@ -5,7 +5,7 @@
 - `main.go` — Entry point, embeds frontend (`//go:embed all:frontend/dist`), audio download/stream handlers, bot detection, cookie handling
 - `handlers.go` — API handlers: playlists CRUD, playlist video fetching, channel listing, progress tracking, channel validation
 - `store.go` — CSV/JSON persistence: channels, playlists, videos, per-user progress. In-memory caches with RWMutex, atomic file writes
-- `auth.go` — Session-based auth: login/register handlers, Bearer token middleware, users.csv storage (plaintext passwords, max 20 users)
+- `auth.go` — Session-based auth: login/register handlers, Bearer token middleware, users.csv storage (plaintext passwords, max 40 users)
 - `frontend/` — React + TypeScript + Vite SPA
   - `src/App.tsx` — Router & navigation (views: login, playlists, videos, player)
   - `src/api.ts` — HTTP client with auth wrapper, all API calls
