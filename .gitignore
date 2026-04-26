@@ -2,5 +2,16 @@ yt-audios
 frontend/node_modules/
 frontend/dist/
 cookies.txt
-data/
+data/*
+!data/.gitkeep
+!data/channels.csv
+!data/playlists.csv
+!data/users.csv
+!data/videos.csv
+!data/audio/
+data/audio/*
+!data/audio/.gitkeep
+!data/progress/
+data/progress/*
+!data/progress/.gitkeep
 data-backup-local/

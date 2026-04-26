@@ -145,3 +145,31 @@ To automate this, set up a cron job on your local machine (requires browser to b
 1. `/audio?url=<youtube_url>` — runs yt-dlp to extract metadata (title, duration, video ID) and starts downloading the audio file in the background
 2. `/stream?id=<video_id>` — serves the downloaded audio file with full seeking support
 3. Audio files are cached in a temp directory and cleaned up on server restart
+
+## Data Schema
+
+The app now enforces data schema validation at startup. If any persisted file shape is invalid, the server exits with a clear error.
+
+Validation-only mode (recommended before release/deploy):
+
+```bash
+go run . -validate-data
+```
+
+If validation passes, you will see a success log and the process exits.
+
+### Required files and headers
+
+- `data/users.csv` header: `username,password`
+- `data/channels.csv` header: `id,name`
+- `data/playlists.csv` header: `username,playlist_id,url,title`
+- `data/videos.csv` header: `playlist_id,video_id,title,duration,position`
+- `data/progress/*.json` must match the `ProgressData` shape used by `/api/progress`
+
+### Row rules
+
+- `users.csv`: `username` and `password` are required
+- `channels.csv`: `id` and `name` are required
+- `playlists.csv`: `username`, `playlist_id`, and `url` are required (`title` can be empty)
+- `videos.csv`: all fields are required; `duration` must be a non-negative number and `position` a non-negative integer
+- `progress/*.json`: timestamps must be non-negative finite numbers, each `positions` entry must have a non-empty `video_id`

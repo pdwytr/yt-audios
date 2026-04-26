@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/fs"
 	"log"
@@ -59,10 +60,20 @@ type AudioInfo struct {
 }
 
 func main() {
+	validateDataOnly := flag.Bool("validate-data", false, "validate data schema and exit")
+	flag.Parse()
+
 	// init data store (DATA_DIR env, or ./data in CWD)
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir == "" {
 		dataDir = "data"
+	}
+	if err := ValidateDataDir(dataDir); err != nil {
+		log.Fatalf("data schema validation failed: %v", err)
+	}
+	if *validateDataOnly {
+		log.Printf("data schema validation passed for %s", dataDir)
+		return
 	}
 
 	// audio cache directory (persists across restarts)

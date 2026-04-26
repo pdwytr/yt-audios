@@ -13,6 +13,7 @@ export interface Video {
 export interface PlaylistSummary {
   id: string;
   title: string;
+  url: string;
   video_count: number;
   fetching: boolean;
 }
