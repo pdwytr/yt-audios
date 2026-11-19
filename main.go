@@ -9,9 +9,11 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -116,6 +118,10 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
+// videoIDPattern matches YouTube video IDs (also guards against path traversal
+// when the ID is used to build a cache file name).
+var videoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
 func audioPath(videoID string) string {
 	return filepath.Join(audioDir, videoID+".m4a")
 }
@@ -124,6 +130,11 @@ func handleAudio(w http.ResponseWriter, r *http.Request) {
 	ytURL := r.URL.Query().Get("url")
 	if ytURL == "" {
 		http.Error(w, `{"error":"missing url parameter"}`, http.StatusBadRequest)
+		return
+	}
+
+	if u, err := url.Parse(ytURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		http.Error(w, `{"error":"invalid url"}`, http.StatusBadRequest)
 		return
 	}
 
@@ -139,7 +150,7 @@ func handleAudio(w http.ResponseWriter, r *http.Request) {
 		"--print", "%(id)s",
 		"--no-playlist",
 	}, cookieArgs()...)
-	args = append(args, ytURL)
+	args = append(args, "--", ytURL)
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 
 	out, err := cmd.Output()
@@ -166,6 +177,10 @@ func handleAudio(w http.ResponseWriter, r *http.Request) {
 
 	dur, _ := strconv.ParseFloat(lines[0], 64)
 	videoID := lines[2]
+	if !videoIDPattern.MatchString(videoID) {
+		http.Error(w, `{"error":"unexpected video id"}`, http.StatusInternalServerError)
+		return
+	}
 
 	info := AudioInfo{
 		Title:    lines[1],
@@ -188,7 +203,11 @@ func handleAudio(w http.ResponseWriter, r *http.Request) {
 
 func downloadAudio(videoID, ytURL string) {
 	ch, _ := downloads.Load(videoID)
-	defer close(ch.(chan struct{}))
+	// Release waiters, then forget the entry so a failed download can be retried.
+	defer func() {
+		downloads.Delete(videoID)
+		close(ch.(chan struct{}))
+	}()
 
 	filePath := audioPath(videoID)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
@@ -201,7 +220,7 @@ func downloadAudio(videoID, ytURL string) {
 		"--no-part",
 		"--no-playlist",
 	}, cookieArgs()...)
-	dlArgs = append(dlArgs, ytURL)
+	dlArgs = append(dlArgs, "--", ytURL)
 	cmd := exec.CommandContext(ctx, "yt-dlp", dlArgs...)
 
 	start := time.Now()
@@ -219,8 +238,8 @@ func downloadAudio(videoID, ytURL string) {
 
 func handleStream(w http.ResponseWriter, r *http.Request) {
 	videoID := r.URL.Query().Get("id")
-	if videoID == "" {
-		http.Error(w, "missing id parameter", http.StatusBadRequest)
+	if !videoIDPattern.MatchString(videoID) {
+		http.Error(w, `{"error":"invalid id parameter"}`, http.StatusBadRequest)
 		return
 	}
 

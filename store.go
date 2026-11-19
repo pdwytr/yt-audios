@@ -50,11 +50,11 @@ type ProgressData struct {
 }
 
 type Store struct {
-	mu               sync.RWMutex
-	dataDir          string
-	playlists        []UserPlaylist            // from playlists.csv
-	videos           map[string][]Video        // playlistID -> videos, from videos.csv
-	fetchingPlaylists sync.Map                 // playlistID -> chan struct{} (transient)
+	mu                sync.RWMutex
+	dataDir           string
+	playlists         []UserPlaylist     // from playlists.csv
+	videos            map[string][]Video // playlistID -> videos, from videos.csv
+	fetchingPlaylists sync.Map           // playlistID -> chan struct{} (transient)
 }
 
 func NewStore(dataDir string) (*Store, error) {
@@ -116,6 +116,12 @@ func (s *Store) ListChannels() []Channel {
 		return []Channel{}
 	}
 	return channels
+}
+
+// HasChannelWhitelist reports whether channels.csv lists at least one channel.
+func (s *Store) HasChannelWhitelist() bool {
+	channels, _ := s.LoadChannels()
+	return len(channels) > 0
 }
 
 func (s *Store) IsChannelAllowed(channelID string) bool {

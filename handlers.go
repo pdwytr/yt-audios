@@ -83,7 +83,8 @@ func handlePlaylists(store *Store) http.HandlerFunc {
 				http.Error(w, `{"error":"failed to validate playlist channel"}`, http.StatusInternalServerError)
 				return
 			}
-			if !store.IsChannelAllowed(vResult.ChannelID) {
+			// an empty channels.csv means no restriction
+			if store.HasChannelWhitelist() && !store.IsChannelAllowed(vResult.ChannelID) {
 				http.Error(w, `{"error":"channel not whitelisted"}`, http.StatusForbidden)
 				return
 			}
