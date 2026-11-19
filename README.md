@@ -53,6 +53,22 @@ curl "http://localhost:8080/audio?url=https://www.youtube.com/watch?v=VIDEO_ID"
 
 `frontend/dist/` must exist before `go build` (the embed fails otherwise). The only runtime dependency is `yt-dlp` on your `PATH`.
 
+## Project structure
+
+```
+yt-audios/
+├── main.go, handlers.go, store.go, auth.go   Go backend (single `main` package)
+├── schema_validation.go (+ _test.go)         startup CSV/JSON schema checks
+├── frontend/                                 React + TypeScript + Vite UI
+│   └── src/ (App.tsx, api.ts, types.ts, components/)
+├── scripts/                                  cookie export, channel-ID lookup, cache cleanup
+├── data/                                     CSV scaffolds + runtime data (see data/README.md)
+├── Dockerfile, docker-compose.yml, Makefile
+└── go.mod
+```
+
+The Go files stay at the repository root because `main.go` embeds `frontend/dist` with `//go:embed`, which cannot reference parent directories.
+
 ## Usage
 
 ### Configuration
@@ -84,8 +100,8 @@ curl "http://localhost:8080/audio?url=https://www.youtube.com/watch?v=VIDEO_ID"
 YouTube may throttle or block unknown IPs. Export browser cookies so yt-dlp can authenticate:
 
 ```bash
-./export-cookies.sh            # Chrome by default
-./export-cookies.sh firefox
+./scripts/export-cookies.sh            # Chrome by default
+./scripts/export-cookies.sh firefox
 YT_COOKIES=cookies.txt ./yt-audios
 ```
 
@@ -93,9 +109,9 @@ The cookies file must be writable (yt-dlp updates it) and is git-ignored. yt-dlp
 
 ### Helper scripts
 
-- `export-cookies.sh [browser]` - export YouTube/Google cookies to `cookies.txt`
-- `get-channel-id.sh <channel-url>` - find a channel ID for `data/channels.csv`
-- `clean-audio-cache.sh [data-dir]` - delete cached `.m4a` files
+- `scripts/export-cookies.sh [browser]` - export YouTube/Google cookies to `cookies.txt`
+- `scripts/get-channel-id.sh <channel-url>` - find a channel ID for `data/channels.csv`
+- `scripts/clean-audio-cache.sh [data-dir]` - delete cached `.m4a` files
 
 ### Development
 
@@ -109,7 +125,7 @@ The Go server needs `frontend/dist/` to exist once (`cd frontend && npm ci && np
 ### Docker
 
 ```bash
-./export-cookies.sh            # on a machine with a browser logged in to YouTube
+./scripts/export-cookies.sh            # on a machine with a browser logged in to YouTube
 docker compose up --build -d   # app on http://localhost (port 80 -> 8080)
 ```
 

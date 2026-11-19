@@ -19,9 +19,9 @@
 
 ## Scripts
 
-- `export-cookies.sh [browser]` — Export YouTube cookies from browser (default: chrome) to `cookies.txt`
-- `get-channel-id.sh <channel-url>` — Get YouTube channel ID for whitelisting
-- `clean-audio-cache.sh [data-dir]` — Delete cached .m4a files from data/audio/
+- `scripts/export-cookies.sh [browser]` — Export YouTube cookies from browser (default: chrome) to `cookies.txt`
+- `scripts/get-channel-id.sh <channel-url>` — Get YouTube channel ID for whitelisting
+- `scripts/clean-audio-cache.sh [data-dir]` — Delete cached .m4a files from data/audio/
 
 ## Data Files
 
