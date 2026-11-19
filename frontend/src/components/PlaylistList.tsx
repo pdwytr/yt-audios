@@ -1,16 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import type { PlaylistSummary, Channel } from "../types";
-import { listPlaylists, addPlaylist, deletePlaylist, listChannels, getProgress, listSuggestions } from "../api";
+import { listPlaylists, addPlaylist, deletePlaylist, listChannels, getProgress } from "../api";
 
 interface Props {
   onSelect: (playlistId: string) => void;
   onBack: () => void;
-}
-
-interface Suggestion {
-  id: string;
-  url: string;
-  title: string;
 }
 
 export default function PlaylistList({ onSelect, onBack }: Props) {
@@ -23,12 +17,6 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
   const [lastPlaylistId, setLastPlaylistId] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
 
-  // Setup view state
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [addingSelected, setAddingSelected] = useState(false);
-  const [skippedSetup, setSkippedSetup] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
 
   async function load() {
     try {
@@ -53,7 +41,6 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
     getProgress()
       .then((p) => { if (p.playlist_id) setLastPlaylistId(p.playlist_id); })
       .catch(() => {});
-    listSuggestions().then(setSuggestions).catch(() => {});
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
@@ -78,90 +65,6 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
   async function handleDelete(id: string) {
     await deletePlaylist(id);
     await load();
-  }
-
-  const ownedIds = new Set(playlists.map((p) => p.id));
-  const availableSuggestions = suggestions.filter((s) => !ownedIds.has(s.id));
-  const remaining = 3 - playlists.length;
-
-  function toggleSuggestion(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else if (next.size < remaining) {
-        next.add(id);
-      }
-      return next;
-    });
-  }
-
-  async function handleAddSelected() {
-    setError("");
-    setAddingSelected(true);
-    try {
-      for (const id of selected) {
-        const s = suggestions.find((s) => s.id === id);
-        if (s) await addPlaylist(s.url);
-      }
-      setSelected(new Set());
-      setShowSuggestions(false);
-      await load();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setAddingSelected(false);
-    }
-  }
-
-  const showSetup = !loading && availableSuggestions.length > 0 &&
-    (showSuggestions || (playlists.length === 0 && !skippedSetup));
-
-  if (showSetup) {
-    return (
-      <div className="view-container" onKeyDown={(e) => {
-        if (e.key === "Enter" && selected.size > 0 && !addingSelected) handleAddSelected();
-      }}>
-        <div className="header-row">
-          <h1>{localStorage.getItem("yt-audios-profile") || "Playlists"}</h1>
-          <button className="btn-logout" onClick={onBack}>
-            Logout
-          </button>
-        </div>
-        <div className="setup-label">Select up to {remaining} playlist{remaining !== 1 ? "s" : ""}</div>
-        {error && <div className="status" style={{ marginBottom: 12 }}>{error}</div>}
-        <div className="setup-list">
-          {availableSuggestions.map((s) => {
-            const isSelected = selected.has(s.id);
-            const isDisabled = !isSelected && selected.size >= remaining;
-            return (
-              <div
-                key={s.id}
-                className={`setup-item${isSelected ? " selected" : ""}${isDisabled ? " disabled" : ""}`}
-                onClick={() => !isDisabled && !addingSelected && toggleSuggestion(s.id)}
-              >
-                <span className="setup-check">{isSelected ? "✓" : ""}</span>
-                <span className="list-item-title">{s.title}</span>
-              </div>
-            );
-          })}
-        </div>
-        <button
-          className="btn-add-selected"
-          disabled={selected.size === 0 || addingSelected}
-          onClick={handleAddSelected}
-        >
-          {addingSelected ? "Adding..." : `Add ${selected.size} playlist${selected.size !== 1 ? "s" : ""}`}
-        </button>
-        <button
-          className="btn-link"
-          style={{ marginTop: 12 }}
-          onClick={() => { setSkippedSetup(true); setShowSuggestions(false); }}
-        >
-          Skip — add by URL instead
-        </button>
-      </div>
-    );
   }
 
   return (
@@ -226,13 +129,6 @@ export default function PlaylistList({ onSelect, onBack }: Props) {
           {playlists.length === 0 && (
             <div className="empty">No playlists yet. Add one above.</div>
           )}
-        </div>
-      )}
-      {!loading && playlists.length < 3 && availableSuggestions.length > 0 && (
-        <div className="suggestions-section">
-          <button className="btn-link" onClick={() => setShowSuggestions(true)}>
-            Browse suggested playlists
-          </button>
         </div>
       )}
       {channels.length > 0 && (

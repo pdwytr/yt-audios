@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -41,88 +40,6 @@ func handleChannels(store *Store) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(store.ListChannels())
-	}
-}
-
-type suggestion struct {
-	ID  string
-	URL string
-}
-
-var suggestions = []suggestion{
-	{"PLG9sUy3Uhal32ob-6jAw3vfa4rFKLyB73", "https://www.youtube.com/playlist?list=PLG9sUy3Uhal32ob-6jAw3vfa4rFKLyB73"},
-	{"PLw1xdVUlD8s9IzPvCxRAd-pjD9TmVbmgJ", "https://www.youtube.com/playlist?list=PLw1xdVUlD8s9IzPvCxRAd-pjD9TmVbmgJ"},
-	{"PLgpPOIQ2eEw12q7M3psgZeVHolRZmQ7-9", "https://www.youtube.com/watch?v=gvzLUFWxMKw&list=PLgpPOIQ2eEw12q7M3psgZeVHolRZmQ7-9"},
-	{"PLgpPOIQ2eEw1i4N657XD9p8pZ1fsAMgfd", "https://www.youtube.com/playlist?list=PLgpPOIQ2eEw1i4N657XD9p8pZ1fsAMgfd"},
-	{"PLgpPOIQ2eEw0i-570pwDeqaYjT0KY8ybP", "https://www.youtube.com/playlist?list=PLgpPOIQ2eEw0i-570pwDeqaYjT0KY8ybP"},
-	{"PLgpPOIQ2eEw0qlHfQ5sffH3YTd2xUtLE2", "https://www.youtube.com/playlist?list=PLgpPOIQ2eEw0qlHfQ5sffH3YTd2xUtLE2"},
-	{"PLgpPOIQ2eEw0EjP1_rOFRT7sIEovobIni", "https://www.youtube.com/playlist?list=PLgpPOIQ2eEw0EjP1_rOFRT7sIEovobIni"},
-}
-
-// suggestionTitles caches fetched titles for suggestions
-var suggestionTitles sync.Map
-
-// fetchSuggestionTitles fetches titles concurrently for suggestions missing from the store
-func fetchSuggestionTitles(store *Store) {
-	var wg sync.WaitGroup
-	for _, s := range suggestions {
-		if store.GetPlaylistTitle(s.ID) != "" {
-			continue
-		}
-		if _, ok := suggestionTitles.Load(s.ID); ok {
-			continue
-		}
-		wg.Add(1)
-		go func(s suggestion) {
-			defer wg.Done()
-			result, err := validatePlaylistChannel(s.URL)
-			if err != nil {
-				log.Printf("failed to fetch suggestion title for %s: %v", s.ID, err)
-				return
-			}
-			if result.PlaylistTitle != "" {
-				suggestionTitles.Store(s.ID, result.PlaylistTitle)
-				log.Printf("fetched suggestion title: %s → %s", s.ID, result.PlaylistTitle)
-			}
-		}(s)
-	}
-	wg.Wait()
-}
-
-func handlePlaylistSuggestions(store *Store) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		type result struct {
-			ID    string `json:"id"`
-			URL   string `json:"url"`
-			Title string `json:"title"`
-		}
-		hasMissing := false
-		var out []result
-		for _, s := range suggestions {
-			title := store.GetPlaylistTitle(s.ID)
-			if title == "" {
-				if t, ok := suggestionTitles.Load(s.ID); ok {
-					title = t.(string)
-				}
-			}
-			if title == "" {
-				hasMissing = true
-				continue // skip suggestions without titles
-			}
-			out = append(out, result{ID: s.ID, URL: s.URL, Title: title})
-		}
-		if hasMissing {
-			go fetchSuggestionTitles(store)
-		}
-		if out == nil {
-			out = []result{}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(out)
 	}
 }
 

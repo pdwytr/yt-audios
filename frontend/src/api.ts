@@ -111,11 +111,6 @@ export async function listChannels(): Promise<Channel[]> {
   return res.json();
 }
 
-export async function listSuggestions(): Promise<{id: string; url: string; title: string}[]> {
-  const res = await fetch("/api/playlists/suggestions");
-  return res.json();
-}
-
 export async function listPlaylists(): Promise<PlaylistSummary[]> {
   const res = await authFetch("/api/playlists");
   return res.json();
