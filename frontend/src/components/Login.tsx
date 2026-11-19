@@ -39,7 +39,7 @@ export default function Login({ onLogin }: Props) {
 
   return (
     <div className="view-container">
-      <h1>Duroos us Salaf</h1>
+      <h1>YT Audios</h1>
       <form onSubmit={handleSubmit}>
         <div className="login-fields">
           <input
