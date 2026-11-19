@@ -1,5 +1,5 @@
 #!/bin/bash
-# Usage: ./get-channel-id.sh https://www.youtube.com/@ChannelHandle
+# Usage: ./scripts/get-channel-id.sh https://www.youtube.com/@ChannelHandle
 if [ -z "$1" ]; then
   echo "Usage: $0 <youtube-channel-url>"
   exit 1

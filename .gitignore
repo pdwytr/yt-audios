@@ -4,6 +4,7 @@ frontend/dist/
 cookies.txt
 data/*
 !data/.gitkeep
+!data/README.md
 !data/channels.csv
 !data/playlists.csv
 !data/users.csv

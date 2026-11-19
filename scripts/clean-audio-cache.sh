@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Remove cached audio files
-# Usage: ./clean-audio-cache.sh [data-dir]
+# Usage: ./scripts/clean-audio-cache.sh [data-dir]
 set -euo pipefail
 
 DATA_DIR="${1:-data}"
