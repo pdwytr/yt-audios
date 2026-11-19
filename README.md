@@ -1,175 +1,137 @@
 # YT Audios
 
-A web-based YouTube audio player. Paste a YouTube URL, listen to the audio. Go backend + React frontend, ships as a single binary.
+A self-hosted web player that turns YouTube videos and playlists into audio you can listen to in the browser. One Go binary, embedded React UI, powered by yt-dlp.
 
-## Quick: Refresh cookies & deploy to server
+## What it does
 
-```bash
-./export-cookies.sh && scp cookies.txt root@137.184.189.111:/opt/yt-audios/cookies.txt
-```
+Paste a YouTube URL and listen. The Go backend uses yt-dlp to read metadata and download the audio track to a local cache, then streams it with full seeking support. Signed-in users can also save playlists and resume where they left off.
 
-Auto-refresh every 6 hours (add to `crontab -e` on your local machine):
+## Features
 
-```bash
-0 */6 * * * cd /Users/pdwytrfa/Documents/projects/yt-audios && ./export-cookies.sh && scp cookies.txt root@137.184.189.111:/opt/yt-audios/cookies.txt
-```
+- Audio-only playback of any YouTube video URL, with seek support (HTTP range requests)
+- Playback speed control (1x to 1.75x), next/previous track, remembered speed
+- Playlists (up to 3 per user) with per-playlist resume position, saved every 10 seconds and on pause/close
+- Simple accounts: register/login with session tokens, one active session per user
+- Optional channel allow-list (`data/channels.csv`); leave it empty to allow any channel
+- On-disk audio cache; downloads run in the background and `/stream` waits for them
+- Bot-detection awareness: surfaces YouTube blocking and recovers when cookies are refreshed
+- Startup data-schema validation (`-validate-data` for a dry run)
+- Single binary with the frontend embedded; Dockerfile and docker-compose included
+
+## Tech stack
+
+- Backend: Go (standard library only), yt-dlp for extraction
+- Frontend: React 19, TypeScript, Vite
+- Storage: CSV and JSON files under `data/` (no database)
 
 ## Prerequisites
 
-- [Go](https://go.dev/dl/) 1.21+
-- [Node.js](https://nodejs.org/) 18+
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp#installation)
+- [Go](https://go.dev/dl/) 1.25+
+- [Node.js](https://nodejs.org/) 20+ and npm
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp#installation) on your `PATH`, plus [ffmpeg](https://ffmpeg.org/) and a JavaScript runtime (Node works) for current YouTube extraction
 
-## Setup
+## Quickstart
+
+```bash
+git clone https://github.com/pdwytr/yt-audios.git
+cd yt-audios
+make build        # builds the frontend, then the Go binary
+./yt-audios       # serves on http://localhost:8080
+```
+
+Open http://localhost:8080, register an account, then add a playlist, or call the API directly:
+
+```bash
+curl "http://localhost:8080/audio?url=https://www.youtube.com/watch?v=VIDEO_ID"
+```
+
+## How the one-binary build works
+
+1. `make build` runs `npm run build` in `frontend/`, producing `frontend/dist/`.
+2. `main.go` embeds that folder with `//go:embed all:frontend/dist`.
+3. `go build -o yt-audios .` compiles the server and the UI into one executable.
+
+`frontend/dist/` must exist before `go build` (the embed fails otherwise). The only runtime dependency is `yt-dlp` on your `PATH`.
+
+## Usage
+
+### Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `8080` | HTTP port |
+| `DATA_DIR` | `data` | Where CSV/JSON state and the audio cache live |
+| `YT_COOKIES` | unset | Path to a Netscape `cookies.txt` passed to yt-dlp |
+| `YT_BROWSER` | unset | Browser name for `--cookies-from-browser` (used if `YT_COOKIES` is unset) |
+
+### HTTP API
+
+| Endpoint | Auth | Description |
+|---|---|---|
+| `GET /audio?url=` | no | Returns `{video_id, title, duration}` and starts caching audio |
+| `GET /stream?id=` | no | Streams cached audio (supports `Range`) |
+| `POST /api/register`, `POST /api/login` | no | Returns a bearer token |
+| `GET /api/register/info` | no | Remaining registration slots (max 40 users) |
+| `GET /api/channels` | no | Allowed channels |
+| `GET/POST/DELETE /api/playlists` | yes | List, add (`{"url"}`), remove (`?id=`) playlists |
+| `GET /api/playlists/videos?id=` | yes | Videos of a playlist |
+| `POST /api/playlists/refresh?id=` | yes | Re-fetch a playlist |
+| `GET/POST /api/progress` | yes | Read/save playback position |
+| `GET /api/status` | no | Bot-detection status |
 
 ### Cookies (recommended)
 
-YouTube throttles requests from unknown IPs. Export your browser cookies so yt-dlp can authenticate:
+YouTube may throttle or block unknown IPs. Export browser cookies so yt-dlp can authenticate:
 
 ```bash
-./export-cookies.sh        # defaults to Chrome
-./export-cookies.sh firefox # or specify browser
+./export-cookies.sh            # Chrome by default
+./export-cookies.sh firefox
+YT_COOKIES=cookies.txt ./yt-audios
 ```
 
-This creates `cookies.txt` with only YouTube/Google cookies. Then run the backend with:
+The cookies file must be writable (yt-dlp updates it) and is git-ignored. yt-dlp reads it on every call, so refreshing cookies needs no restart. When the UI reports "bot detected", re-export; the banner clears after 30 minutes.
+
+### Helper scripts
+
+- `export-cookies.sh [browser]` - export YouTube/Google cookies to `cookies.txt`
+- `get-channel-id.sh <channel-url>` - find a channel ID for `data/channels.csv`
+- `clean-audio-cache.sh [data-dir]` - delete cached `.m4a` files
+
+### Development
 
 ```bash
-YT_COOKIES=cookies.txt make dev-backend
+make dev-backend    # Go server on :8080
+make dev-frontend   # Vite dev server on :5173, proxies API calls to :8080
 ```
 
-Re-run the script whenever cookies expire.
+The Go server needs `frontend/dist/` to exist once (`cd frontend && npm ci && npm run build`) so it compiles.
 
-### Users
-
-Edit `users.csv` to add login credentials (format: `username,password` per line).
-
-## Development
-
-Two terminals:
+### Docker
 
 ```bash
-# Terminal 1: Go backend on :8080
-YT_COOKIES=cookies.txt make dev-backend
-
-# Terminal 2: Vite dev server on :5173 (proxies API to Go)
-make dev-frontend
+./export-cookies.sh            # on a machine with a browser logged in to YouTube
+docker compose up --build -d   # app on http://localhost (port 80 -> 8080)
 ```
 
-Open http://localhost:5173
+`docker-compose.yml` also defines an optional Cloudflare Tunnel service; set `CLOUDFLARE_TUNNEL_TOKEN` to use it, or remove that service. Data persists in `./data/`.
 
-## Production Build
+To deploy to a server, clone the repo there, copy `data/` and `cookies.txt` from your machine, and run `docker compose up --build -d`. To update: `git pull && docker compose up --build -d`.
+
+## Data files
+
+Validated at startup; run `go run . -validate-data` to check without starting the server.
+
+- `data/users.csv`: `username,password`
+- `data/channels.csv`: `id,name` (optional allow-list)
+- `data/playlists.csv`: `username,playlist_id,url,title`
+- `data/videos.csv`: `playlist_id,video_id,title,duration,position`
+- `data/progress/*.json`: per-user playback positions
+
+Note: passwords are stored in plaintext in `users.csv`. Use for personal or trusted-group deployments only.
+
+## Testing
 
 ```bash
-make build
-./yt-audios
+go vet ./... && go test ./...
+cd frontend && npm run lint && npm run build
 ```
-
-This builds the React frontend, embeds it into the Go binary, and produces a single `yt-audios` executable. Open http://localhost:8080
-
-## Docker Deployment
-
-### 1. Export cookies (on your local machine)
-
-The export script needs a browser with an active YouTube session, so it must run locally — not on the server.
-
-```bash
-./export-cookies.sh           # defaults to Chrome
-./export-cookies.sh firefox   # or specify browser
-```
-
-This creates `cookies.txt` in the project root. The cookies file **must** be writable (not read-only) since yt-dlp updates it at runtime.
-
-### 2. Build and start
-
-```bash
-docker compose up --build -d
-```
-
-The app will be at `http://localhost:8080`. Data persists in `./data/`.
-
-### 3. (Optional) Cloudflare Tunnel
-
-To expose the app via Cloudflare Tunnel:
-
-```bash
-export CLOUDFLARE_TUNNEL_TOKEN=your-token-here
-docker compose up --build -d
-```
-
-### Refreshing cookies
-
-When you see "bot detected" errors, just re-export cookies — no restart needed. Each yt-dlp call reads the file fresh from disk, and the bot detection banner auto-clears after 30 minutes.
-
-```bash
-./export-cookies.sh
-```
-
-### VPS deployment
-
-**Initial setup** — clone the repo on the server, then copy `data/` and `cookies.txt` from your local machine. The `data/` directory contains user credentials and playlists, so it must be transferred on first deploy.
-
-```bash
-# clone on server
-ssh user@server "git clone <repo-url> ~/yt-audios"
-
-# copy data and cookies from local machine
-scp -r data/ user@server:~/yt-audios/data/
-scp cookies.txt user@server:~/yt-audios/cookies.txt
-
-# start on server
-ssh user@server "cd yt-audios && docker compose up --build -d"
-```
-
-**Updating** — pull latest code and rebuild:
-
-```bash
-ssh user@server "cd yt-audios && git pull && docker compose up --build -d"
-```
-
-**Cookie refresh** — YouTube cookies expire every few hours. Re-export on your local machine (where the browser is) and SCP to the server. No restart needed, yt-dlp reads the file fresh on every call.
-
-```bash
-./export-cookies.sh
-scp cookies.txt user@server:~/yt-audios/cookies.txt
-```
-
-To automate this, set up a cron job on your local machine (requires browser to be running):
-
-```bash
-# crontab -e
-0 */3 * * * cd ~/path/to/yt-audios && ./export-cookies.sh && scp cookies.txt user@server:~/yt-audios/cookies.txt
-```
-
-## How It Works
-
-1. `/audio?url=<youtube_url>` — runs yt-dlp to extract metadata (title, duration, video ID) and starts downloading the audio file in the background
-2. `/stream?id=<video_id>` — serves the downloaded audio file with full seeking support
-3. Audio files are cached in a temp directory and cleaned up on server restart
-
-## Data Schema
-
-The app now enforces data schema validation at startup. If any persisted file shape is invalid, the server exits with a clear error.
-
-Validation-only mode (recommended before release/deploy):
-
-```bash
-go run . -validate-data
-```
-
-If validation passes, you will see a success log and the process exits.
-
-### Required files and headers
-
-- `data/users.csv` header: `username,password`
-- `data/channels.csv` header: `id,name`
-- `data/playlists.csv` header: `username,playlist_id,url,title`
-- `data/videos.csv` header: `playlist_id,video_id,title,duration,position`
-- `data/progress/*.json` must match the `ProgressData` shape used by `/api/progress`
-
-### Row rules
-
-- `users.csv`: `username` and `password` are required
-- `channels.csv`: `id` and `name` are required
-- `playlists.csv`: `username`, `playlist_id`, and `url` are required (`title` can be empty)
-- `videos.csv`: all fields are required; `duration` must be a non-negative number and `position` a non-negative integer
-- `progress/*.json`: timestamps must be non-negative finite numbers, each `positions` entry must have a non-empty `video_id`
