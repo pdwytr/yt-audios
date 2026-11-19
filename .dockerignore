@@ -6,3 +6,6 @@ data
 !frontend/package*.json
 cookies.txt
 yt-audios
+.git
+.cookies.tmp
+.DS_Store

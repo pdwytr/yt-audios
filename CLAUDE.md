@@ -39,7 +39,6 @@
 - Dev: `make dev-backend` + `make dev-frontend` (two terminals)
 - Docker: `docker compose up --build -d` (multi-stage build, port 80 -> 8080)
 - `frontend/dist/` must exist before `go build` (embed directive requires it)
-- VPS deployment at 137.184.189.111, files under `/opt/yt-audios/`
 
 ## Architecture
 
